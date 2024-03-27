@@ -14,7 +14,10 @@
 
         <activity
             android:name=".feature.example.ExampleActivity"
-            android:exported="true" >
+            android:exported="false" />
+        <activity
+            android:name=".feature.main.MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

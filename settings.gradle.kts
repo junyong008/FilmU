@@ -18,3 +18,4 @@ rootProject.name = "FilmU"
 include(":presentation")
 include(":data")
 include(":domain")
+include(":opencv")

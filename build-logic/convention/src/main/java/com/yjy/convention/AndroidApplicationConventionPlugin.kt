@@ -48,6 +48,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 dependencies {
                     add("implementation", project(":data"))
                     add("implementation", project(":domain"))
+                    add("implementation", project(":opencv"))
 
                     add("implementation", libs.findLibrary("androidx-core").get())
                     add("implementation", libs.findLibrary("androidx-appcompat").get())
