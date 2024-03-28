@@ -17,6 +17,7 @@ import org.opencv.android.OpenCVLoader
 class MainActivity : BaseActivity<ActivityMainBinding>(R.layout.activity_main) {
 
     private val mainViewModel: MainViewModel by viewModels()
+    private val tag = "MainActivity"
 
     override fun initViewModel() {
         binding.mainViewModel = mainViewModel
@@ -24,9 +25,15 @@ class MainActivity : BaseActivity<ActivityMainBinding>(R.layout.activity_main) {
 
     override fun initView(savedInstanceState: Bundle?) {
         if (!OpenCVLoader.initDebug()) {
-            Log.e("MainActivity", "OpenCV 초기화 실패")
+            Log.e(tag, "OpenCV 초기화 실패")
         } else {
-            Log.d("MainActivity", "OpenCV 초기화 성공")
+            Log.d(tag, "OpenCV 초기화 성공")
+        }
+    }
+
+    override fun setListener() {
+        binding.buttonNewProject.setOnClickListener {
+            Log.d(tag, "새 프로젝트 버튼 클릭")
         }
     }
 }
