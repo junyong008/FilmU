@@ -59,12 +59,14 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     add("androidTestImplementation", libs.findLibrary("espresso").get())
 
                     add("implementation", libs.findBundle("lifecycle").get())
+                    add("implementation", libs.findBundle("camera").get())
                     add("implementation", libs.findLibrary("androidx-activity").get())
                     add("implementation", libs.findLibrary("androidx-fragment").get())
                     add("implementation", libs.findLibrary("androidx-constraintLayout").get())
                     add("implementation", libs.findLibrary("androidx-paging").get())
 
                     add("implementation", libs.findLibrary("glide").get())
+                    add("implementation", libs.findLibrary("permission").get())
                 }
             }
         }

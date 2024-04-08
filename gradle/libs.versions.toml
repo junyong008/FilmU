@@ -9,6 +9,7 @@ androidx-fragment = "1.6.2"
 androidx-paging = "3.2.1"
 androidx-room = "2.6.1"
 androidx-datastore = "1.0.0"
+androidx-camera = "1.4.0-alpha04"
 
 # Test
 junit = "4.13.2"
@@ -30,6 +31,7 @@ kotlin = "1.9.22"
 glide = "4.16.0"
 retrofit ="2.9.0"
 okhttp3 = "4.11.0"
+permission = "0.9.26"
 
 
 [libraries]
@@ -52,6 +54,13 @@ androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref =
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "androidx-room" }
 androidx-room-paging = { module = "androidx.room:room-paging", version.ref = "androidx-room" }
 androidx-datastore = { module = "androidx.datastore:datastore-preferences", version.ref = "androidx-datastore" }
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "androidx-camera" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "androidx-camera" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "androidx-camera" }
+androidx-camera-video = { module = "androidx.camera:camera-video", version.ref = "androidx-camera" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "androidx-camera" }
+androidx-camera-mlkit-vision = { module = "androidx.camera:camera-mlkit-vision", version.ref = "androidx-camera" }
+androidx-camera-extensions = { module = "androidx.camera:camera-extensions", version.ref = "androidx-camera" }
 
 # Test
 junit = { module = "junit:junit", version.ref = "junit" }
@@ -70,12 +79,14 @@ glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit-converter = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofit" }
 okhttp3 = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp3" }
+permission = { module = "com.github.logansdk:logan-permission", version.ref = "permission" }
 
 
 [bundles]
 lifecycle = ["androidx-lifecycleLiveData", "androidx-lifecycleViewModel"]
 room = ["androidx-room", "androidx-room-ktx", "androidx-room-paging"]
 retrofit = ["retrofit", "retrofit-converter"]
+camera = ["androidx-camera-core", "androidx-camera-camera2", "androidx-camera-lifecycle", "androidx-camera-video", "androidx-camera-view", "androidx-camera-mlkit-vision", "androidx-camera-extensions"]
 
 
 [plugins]

@@ -5,10 +5,13 @@ import com.yjy.data.repository.githubrepo.local.GithubRepoLocalDataSource
 import com.yjy.data.repository.githubrepo.remote.GithubRepoRemoteDataSource
 import com.yjy.data.repository.joke.JokeRepositoryImpl
 import com.yjy.data.repository.joke.remote.JokeRemoteDataSource
+import com.yjy.data.repository.media.MediaRepositoryImpl
+import com.yjy.data.repository.media.local.MediaLocalDataSource
 import com.yjy.data.repository.number.NumberRepositoryImpl
 import com.yjy.data.repository.number.local.NumberLocalDataSource
 import com.yjy.domain.repository.GithubRepoRepository
 import com.yjy.domain.repository.JokeRepository
+import com.yjy.domain.repository.MediaRepository
 import com.yjy.domain.repository.NumberRepository
 import dagger.Module
 import dagger.Provides
@@ -19,6 +22,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 class RepositoryModule {
+
+    @Provides
+    @Singleton
+    fun provideMediaRepository(mediaLocalDataSource: MediaLocalDataSource): MediaRepository {
+        return MediaRepositoryImpl(mediaLocalDataSource)
+    }
 
     @Provides
     @Singleton

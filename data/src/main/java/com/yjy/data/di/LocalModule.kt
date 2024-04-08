@@ -6,6 +6,8 @@ import com.yjy.data.local.database.dao.GithubRepoDao
 import com.yjy.data.local.datastore.ExampleDataStore
 import com.yjy.data.repository.githubrepo.local.GithubRepoLocalDataSource
 import com.yjy.data.repository.githubrepo.local.GithubRepoLocalDataSourceImpl
+import com.yjy.data.repository.media.local.MediaLocalDataSource
+import com.yjy.data.repository.media.local.MediaLocalDataSourceImpl
 import com.yjy.data.repository.number.local.NumberLocalDataSource
 import com.yjy.data.repository.number.local.NumberLocalDataSourceImpl
 import dagger.Module
@@ -18,6 +20,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 class LocalModule {
+
+    @Provides
+    @Singleton
+    fun provideMediaLocalDataSource(@ApplicationContext context: Context): MediaLocalDataSource {
+        return MediaLocalDataSourceImpl(context)
+    }
 
     @Provides
     @Singleton

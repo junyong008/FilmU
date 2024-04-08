@@ -2,4 +2,7 @@
 <resources>
     <string name="app_name">FilmU</string>
     <string name="example_button">예시 버튼</string>
+    <string name="camera_permission_denied">카메라 접근 권한이 거부되었습니다.</string>
+    <string name="fail_to_access_file">파일 접근에 실패했습니다.</string>
+    <string name="fail_to_take_photo">사진 촬영 실패.</string>
 </resources>
