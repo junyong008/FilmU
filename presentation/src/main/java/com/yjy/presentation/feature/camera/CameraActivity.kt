@@ -13,8 +13,6 @@ import android.view.View
 import android.view.WindowManager
 import android.view.animation.AnimationUtils
 import androidx.activity.viewModels
-import androidx.annotation.OptIn
-import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -67,7 +65,6 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }
     }
 
-    @OptIn(ExperimentalGetImage::class)
     private fun updateCameraConfiguration() {
         requestPermissions()
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
@@ -134,19 +131,8 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
 
     override fun setListener() {
         binding.buttonTakePhoto.setOnClickListener { view ->
-            vibrate()
             animateTakePhoto(view)
-            flashScreen()
             takePhoto()
-        }
-    }
-
-    private fun vibrate() {
-        val vibrator = getSystemService(Vibrator::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator?.vibrate(VibrationEffect.createOneShot(VIBRATION_DURATION, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            vibrator?.vibrate(VIBRATION_DURATION) //deprecated in API 26
         }
     }
 
@@ -155,18 +141,12 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         view.startAnimation(animation)
     }
 
-    private fun flashScreen() {
-        binding.flashView.visibility = View.VISIBLE
-        Handler(Looper.getMainLooper()).postDelayed({
-            binding.flashView.visibility = View.GONE
-        }, CAPTURE_EFFECT_DURATION)
-    }
-
-
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
-        val (outputFileOptions, imageFile) = cameraViewModel.prepareImageCapture()
 
+        vibrate()
+        flashScreen()
+        val (outputFileOptions, imageFile) = cameraViewModel.prepareImageCapture()
         imageCapture.takePicture(
             outputFileOptions,
             ContextCompat.getMainExecutor(this),
@@ -181,6 +161,22 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         )
     }
 
+    private fun vibrate() {
+        val vibrator = getSystemService(Vibrator::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator?.vibrate(VibrationEffect.createOneShot(VIBRATION_DURATION, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            vibrator?.vibrate(VIBRATION_DURATION) //deprecated in API 26
+        }
+    }
+
+    private fun flashScreen() {
+        binding.flashView.visibility = View.VISIBLE
+        Handler(Looper.getMainLooper()).postDelayed({
+            binding.flashView.visibility = View.GONE
+        }, CAPTURE_EFFECT_DURATION)
+    }
+
     override fun observeStateFlows() {
         collectLatestStateFlow(cameraViewModel.aspectRatio) {
             updatePreviewViewSize()
@@ -191,9 +187,11 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }
         collectLatestStateFlow(cameraViewModel.beforeImage) { beforeImage ->
             beforeImage?.let {
+                startProgress()
                 val beforeView = binding.imageViewBefore
                 when(beforeImage) {
                     is CameraViewModel.BeforeImage.Original -> beforeView.alpha = 0.5f
+                    is CameraViewModel.BeforeImage.None -> resetProgress()
                     else -> beforeView.alpha = 1f
                 }
                 beforeView.setImageBitmap(beforeImage.getOriginalImage())
@@ -222,6 +220,8 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
 
                 if (currentProgressValue < 100) {
                     progressHandler.postDelayed(this, PROGRESS_UPDATE_INTERVAL)
+                } else {
+                    takePhoto()
                 }
             }
         }.also { progressHandler.postDelayed(it, PROGRESS_UPDATE_INTERVAL) }
