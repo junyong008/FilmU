@@ -187,18 +187,17 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }
         collectLatestStateFlow(cameraViewModel.beforeImage) { beforeImage ->
             beforeImage?.let {
-                startProgress()
                 val beforeView = binding.imageViewBefore
                 when(beforeImage) {
                     is CameraViewModel.BeforeImage.Original -> beforeView.alpha = 0.5f
-                    is CameraViewModel.BeforeImage.None -> resetProgress()
                     else -> beforeView.alpha = 1f
                 }
                 beforeView.setImageBitmap(beforeImage.getOriginalImage())
             }
         }
-        collectLatestStateFlow(cameraViewModel.isImageSame) { isImageSame ->
-            if (isImageSame) startProgress() else resetProgress()
+        collectLatestStateFlow(cameraViewModel.autoCaptureProgress) {
+            binding.progressSimilarity.setProgress(it)
+            if (it >= 100) takePhoto()
         }
     }
 
@@ -208,28 +207,6 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
             if (newWidth > 0) this.width = newWidth
             if (newHeight > 0) this.height = newHeight
         }
-    }
-
-    private fun startProgress() {
-        progressHandler.removeCallbacksAndMessages(null) // 이전에 실행된 모든 콜백 및 메시지 제거
-        progressRunnable = object : Runnable {
-            override fun run() {
-                var currentProgressValue = binding.progressSimilarity.getProgress()
-                currentProgressValue += (PROGRESS_UPDATE_INTERVAL * 100 / AUTO_CAPTURE_DURATION)
-                binding.progressSimilarity.setProgress(currentProgressValue)
-
-                if (currentProgressValue < 100) {
-                    progressHandler.postDelayed(this, PROGRESS_UPDATE_INTERVAL)
-                } else {
-                    takePhoto()
-                }
-            }
-        }.also { progressHandler.postDelayed(it, PROGRESS_UPDATE_INTERVAL) }
-    }
-
-    private fun resetProgress() {
-        progressHandler.removeCallbacksAndMessages(null)
-        binding.progressSimilarity.setProgress(0f)
     }
 
     override fun observeSharedFlow() {
@@ -246,11 +223,6 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        progressHandler.removeCallbacksAndMessages(null)
-    }
-
     companion object {
         private const val TAG = "CameraActivity"
         private val REQUIRE_PERMISSIONS = mutableListOf(Manifest.permission.CAMERA).apply {
@@ -258,7 +230,5 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }.toTypedArray()
         private const val VIBRATION_DURATION = 10L
         private const val CAPTURE_EFFECT_DURATION = 10L
-        private const val AUTO_CAPTURE_DURATION = 5000L
-        private const val PROGRESS_UPDATE_INTERVAL = 100L
     }
 }

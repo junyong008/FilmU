@@ -19,6 +19,7 @@ import com.yjy.presentation.util.rotate
 import com.yjy.presentation.util.toBitmap
 import com.yjy.presentation.util.toMat
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -47,6 +48,8 @@ class CameraViewModel @Inject constructor(
     private var analyzeImage: Mat? = null
     private var oriBeforeImage: Bitmap? = null
     private var contourBeforeImage: Bitmap? = null
+    private var isImageSame = false
+    private var isProgressStarted = false
 
     private val _message = MutableSharedFlow<CameraMessage>(replay = 0)
     val message: SharedFlow<CameraMessage> = _message
@@ -57,8 +60,8 @@ class CameraViewModel @Inject constructor(
     private val _beforeImage = MutableStateFlow<BeforeImage?>(null)
     val beforeImage: StateFlow<BeforeImage?> = _beforeImage.asStateFlow()
 
-    private val _isImageSame = MutableStateFlow(false)
-    val isImageSame: StateFlow<Boolean> = _isImageSame.asStateFlow()
+    private val _autoCaptureProgress = MutableStateFlow(0f)
+    val autoCaptureProgress: StateFlow<Float> = _autoCaptureProgress.asStateFlow()
 
     private val _aspectRatio = MutableStateFlow(AspectRatio.RATIO_16_9)
     val aspectRatio: StateFlow<AspectRatio> = _aspectRatio.asStateFlow()
@@ -71,6 +74,7 @@ class CameraViewModel @Inject constructor(
     }
 
     fun initBeforeImage(uri: Uri) {
+        if (beforeImage.value != null) return
         viewModelScope.launch {
             val bitmap = mediaRepository.getBitmapFromUri(uri)
             val exifInterface = mediaRepository.getExifInterfaceFromUri(uri)
@@ -105,7 +109,10 @@ class CameraViewModel @Inject constructor(
         if(beforeImage.value == null) return
         _beforeImage.value = when(beforeImage.value) {
             is BeforeImage.Original -> BeforeImage.Contour(contourBeforeImage!!)
-            is BeforeImage.Contour -> BeforeImage.None
+            is BeforeImage.Contour ->  {
+                resetProgress()
+                BeforeImage.None
+            }
             else -> BeforeImage.Original(oriBeforeImage!!)
         }
     }
@@ -165,7 +172,8 @@ class CameraViewModel @Inject constructor(
         }
 
         val similarity = calculateImageSimilarity(currentMat, analyzeImage!!)
-        _isImageSame.value = (similarity < MAX_SIMILARITY_TO_MATCH)
+        isImageSame = (similarity < MAX_SIMILARITY_TO_MATCH)
+        if (isImageSame && !isProgressStarted && beforeImage.value !is BeforeImage.None) startProgress()
         Log.d("SMSM", "$similarity")
     }
 
@@ -179,6 +187,28 @@ class CameraViewModel @Inject constructor(
         Imgproc.calcHist(listOf(image2), MatOfInt(0), Mat(), hist2, histSize, ranges, accumulate)
         return Imgproc.compareHist(hist1, hist2, Imgproc.CV_COMP_BHATTACHARYYA)
     }
+
+    private fun startProgress() {
+        isProgressStarted = true
+        viewModelScope.launch {
+            var elapsedTime = 0L
+            while (elapsedTime < AUTO_CAPTURE_DURATION) {
+                if (!isImageSame || beforeImage.value is BeforeImage.None) {
+                    resetProgress()
+                    return@launch
+                }
+                delay(PROGRESS_UPDATE_INTERVAL)
+                elapsedTime += PROGRESS_UPDATE_INTERVAL
+                _autoCaptureProgress.value = (elapsedTime.toFloat() / AUTO_CAPTURE_DURATION * 100)
+            }
+        }
+    }
+
+    private fun resetProgress() {
+        isProgressStarted = false
+        _autoCaptureProgress.value = 0f
+    }
+
 
     fun prepareImageCapture(): Pair<ImageCapture.OutputFileOptions, File> {
         val imageFile = mediaRepository.createImageFile()
@@ -291,5 +321,7 @@ class CameraViewModel @Inject constructor(
 
     companion object {
         private const val MAX_SIMILARITY_TO_MATCH = 0.25
+        private const val AUTO_CAPTURE_DURATION = 5000L
+        private const val PROGRESS_UPDATE_INTERVAL = 100L
     }
 }
