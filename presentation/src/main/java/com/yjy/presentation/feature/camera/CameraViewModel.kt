@@ -39,6 +39,7 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import java.io.File
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 @HiltViewModel
 class CameraViewModel @Inject constructor(
@@ -105,7 +106,20 @@ class CameraViewModel @Inject constructor(
             oriBeforeImage = rotatedImage
             contourBeforeImage = getEdgeImageFromBitmap(rotatedImage)
 
+            selectAspectRatio(oriBeforeImage!!)
             _beforeImage.value = BeforeImage.Original(oriBeforeImage!!)
+        }
+    }
+
+    private fun selectAspectRatio(bitmap: Bitmap) {
+        val width = bitmap.width
+        val height = bitmap.height
+        val ratio = ((height.toFloat() / width.toFloat()) * 10).roundToInt() / 10f
+        _aspectRatio.value = when (ratio) {
+            1f -> AspectRatio.RATIO_1_1
+            ((4f / 3f) * 10).roundToInt() / 10f -> AspectRatio.RATIO_3_4
+            ((16f / 9f) * 10).roundToInt() / 10f -> AspectRatio.RATIO_16_9
+            else -> AspectRatio.RATIO_FULL
         }
     }
 
@@ -258,6 +272,7 @@ class CameraViewModel @Inject constructor(
     }
 
     fun selectAspectRatio(ratio: AspectRatio) {
+        if (oriBeforeImage != null) return
         _aspectRatio.value = ratio
     }
 
