@@ -91,13 +91,13 @@
 
         <View
             android:id="@+id/view2"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="0dp"
             android:background="#4D000000"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintDimensionRatio="H,16:9" />
+            app:layout_constraintHeight_percent="0.3"/>
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/textView_test"
@@ -204,6 +204,26 @@
                 android:text="Full"
                 android:textSize="10dp"
                 android:onClick="@{() -> cameraViewModel.selectAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_FULL)}"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@+id/textView_test">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/imageView_test1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@color/gray" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/imageView_test2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@color/gray" />
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

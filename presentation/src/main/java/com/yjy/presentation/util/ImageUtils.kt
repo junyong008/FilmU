@@ -2,6 +2,7 @@ package com.yjy.presentation.util
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.media.ExifInterface
 import android.util.Rational
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
@@ -14,29 +15,59 @@ import org.opencv.core.Rect
 import org.opencv.imgproc.Imgproc
 import kotlin.math.max
 
-object ImageUtils {
+interface ImageUtils {
+    fun bitmapToMat(bitmap: Bitmap): Mat
+    fun rotateBitmap(bitmap: Bitmap, angle: Float): Bitmap
+    fun resizeBitmap(bitmap: Bitmap, width: Int, height: Int): Bitmap
+    fun flipBitmapHorizontally(bitmap: Bitmap): Bitmap
+    fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap
+    fun cropMat(source: Mat, target: Mat, aspectRatio: Rational)
+    fun rotateMat(source: Mat, target: Mat, degree: Int)
+    fun matToBitmap(mat: Mat): Bitmap
+    fun getMatSize(mat: Mat): Pair<Int, Int>
+    fun imageProxyToMat(imageProxy: ImageProxy): Mat?
+}
+
+class ImageUtilsImpl : ImageUtils {
 
     // Bitmap
-    fun Bitmap.toMat(): Mat {
-        val mat = Mat(this.height, this.width, CvType.CV_8UC1)
-        Utils.bitmapToMat(this, mat)
+    override fun bitmapToMat(bitmap: Bitmap): Mat {
+        val mat = Mat(bitmap.height, bitmap.width, CvType.CV_8UC1)
+        Utils.bitmapToMat(bitmap, mat)
         return mat
     }
 
-    fun Bitmap.rotate(angle: Float): Bitmap {
+    override fun rotateBitmap(bitmap: Bitmap, angle: Float): Bitmap {
         val matrix = Matrix().apply { postRotate(angle) }
-        return Bitmap.createBitmap(this, 0, 0, this.width, this.height, matrix, true)
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
-    fun Bitmap.flipHorizontally(): Bitmap {
+    override fun resizeBitmap(bitmap: Bitmap, width: Int, height: Int): Bitmap {
+        return Bitmap.createScaledBitmap(bitmap, width, height, true)
+    }
+
+    override fun flipBitmapHorizontally(bitmap: Bitmap): Bitmap {
         val matrix = Matrix().apply {
-            postScale(-1f, 1f, this@flipHorizontally.width / 2f, this@flipHorizontally.height / 2f)
+            postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
         }
-        return Bitmap.createBitmap(this, 0, 0, this.width, this.height, matrix, true)
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    override fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap {
+        return when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(bitmap, 90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(bitmap, 180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(bitmap, 270f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                rotateBitmap(bitmap, 270f)
+                flipBitmapHorizontally(bitmap)
+            }
+            else -> bitmap
+        }
     }
 
     // Mat
-    fun cropMat(source: Mat, target: Mat, aspectRatio: Rational) {
+    override fun cropMat(source: Mat, target: Mat, aspectRatio: Rational) {
         val originalWidth = source.width()
         val originalHeight = source.height()
         val targetRatio = aspectRatio.toFloat()
@@ -58,7 +89,7 @@ object ImageUtils {
         cropped.release()
     }
 
-    fun rotateMat(source: Mat, target: Mat, degree: Int) {
+    override fun rotateMat(source: Mat, target: Mat, degree: Int) {
         var rotatedMat = Mat()
         when (degree) {
             90 -> Core.rotate(source, rotatedMat, Core.ROTATE_90_CLOCKWISE)
@@ -70,28 +101,18 @@ object ImageUtils {
         rotatedMat.release()
     }
 
-    fun Mat.toBitmap(): Bitmap {
-        val bitmap = Bitmap.createBitmap(this.cols(), this.rows(), Bitmap.Config.ARGB_8888)
-        Utils.matToBitmap(this, bitmap)
+    override fun matToBitmap(mat: Mat): Bitmap {
+        val bitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(mat, bitmap)
         return bitmap
     }
 
-    fun Mat.rotate(degree: Int): Mat {
-        var rotatedMat = Mat()
-        when (degree) {
-            90 -> Core.rotate(this, rotatedMat, Core.ROTATE_90_CLOCKWISE)
-            180 -> Core.rotate(this, rotatedMat, Core.ROTATE_180)
-            270 -> Core.rotate(this, rotatedMat, Core.ROTATE_90_COUNTERCLOCKWISE)
-            else -> rotatedMat = this.clone() // 회전이 필요 없는 경우, 원본 Mat 복제
-        }
-        this.release()
-        return rotatedMat
-    }
+    override fun getMatSize(mat: Mat): Pair<Int, Int> = Pair(mat.width(), mat.height())
 
     // ImageProxy
     @OptIn(ExperimentalGetImage::class)
-    fun ImageProxy.toMat(): Mat? {
-        val image = this.image ?: return null
+    override fun imageProxyToMat(imageProxy: ImageProxy): Mat? {
+        val image = imageProxy.image ?: return null
 
         val yBuffer = image.planes[0].buffer // Y 플레인
         val uBuffer = image.planes[1].buffer // U 플레인

@@ -2,9 +2,7 @@ package com.yjy.presentation.feature.main
 
 import android.app.Activity
 import android.content.Intent
-import android.os.Bundle
 import android.provider.MediaStore
-import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import com.yjy.presentation.R
@@ -12,7 +10,6 @@ import com.yjy.presentation.base.BaseActivity
 import com.yjy.presentation.databinding.ActivityMainBinding
 import com.yjy.presentation.feature.camera.CameraActivity
 import dagger.hilt.android.AndroidEntryPoint
-import org.opencv.android.OpenCVLoader
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity<ActivityMainBinding>(R.layout.activity_main) {
@@ -21,14 +18,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(R.layout.activity_main) {
 
     override fun initViewModel() {
         binding.mainViewModel = mainViewModel
-    }
-
-    override fun initView(savedInstanceState: Bundle?) {
-        if (!OpenCVLoader.initDebug()) {
-            Log.e(TAG, "OpenCV 초기화 실패")
-        } else {
-            Log.d(TAG, "OpenCV 초기화 성공")
-        }
     }
 
     override fun setListener() {
