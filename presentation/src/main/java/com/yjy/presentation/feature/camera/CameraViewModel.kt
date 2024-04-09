@@ -3,7 +3,6 @@ package com.yjy.presentation.feature.camera
 import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
-import android.util.Log
 import android.util.Rational
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -173,7 +172,6 @@ class CameraViewModel @Inject constructor(
 
         // 유사도 분석이 가능하면 유사도 분석 실시.
         if (beforeImage.value != null && beforeImage.value !is BeforeImage.None) {
-            Imgproc.cvtColor(currentMat, currentMat, Imgproc.COLOR_BGR2GRAY)
             compareWithBeforeImage(currentMat)
         }
 
@@ -209,12 +207,16 @@ class CameraViewModel @Inject constructor(
             val resizedImage = Bitmap.createScaledBitmap(oriBeforeImage!!, currentMat.width(), currentMat.height(), true)
             analyzeImage = resizedImage.toMat()
             Imgproc.cvtColor(analyzeImage, analyzeImage, Imgproc.COLOR_BGR2GRAY)
+            Imgproc.threshold(analyzeImage, analyzeImage, 0.0, 255.0, Imgproc.THRESH_OTSU)
         }
+
+        // 현재 이미지 또한 분석용 이미지와의 색감차이를 이진화로 개선
+        Imgproc.cvtColor(currentMat, currentMat, Imgproc.COLOR_BGR2GRAY)
+        Imgproc.threshold(currentMat, currentMat, 0.0, 255.0, Imgproc.THRESH_OTSU)
 
         val similarity = calculateImageSimilarity(currentMat, analyzeImage!!)
         isImageSame = (similarity < MAX_SIMILARITY_TO_MATCH)
         if (isImageSame && !isProgressStarted && beforeImage.value !is BeforeImage.None) startProgress()
-        Log.d("SMSM", "$similarity")
     }
 
     private fun calculateImageSimilarity(image1: Mat, image2: Mat): Double {
