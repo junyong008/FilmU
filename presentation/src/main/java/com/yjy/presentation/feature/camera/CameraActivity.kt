@@ -1,6 +1,7 @@
 package com.yjy.presentation.feature.camera
 
 import android.Manifest
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -19,12 +20,20 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.transition.AutoTransition
+import androidx.transition.Transition
+import androidx.transition.TransitionListenerAdapter
+import androidx.transition.TransitionManager
 import com.github.logansdk.permission.PermissionManager
 import com.yjy.presentation.R
 import com.yjy.presentation.base.BaseActivity
 import com.yjy.presentation.databinding.ActivityCameraBinding
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -179,7 +188,8 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
 
     override fun observeStateFlows() {
         collectLatestStateFlow(cameraViewModel.aspectRatio) {
-            updatePreviewViewSize()
+            // 뷰가 완전히 렌더링되기 전에 updatePreviewViewSize하면 transition가 작동하지 않음. 고로 post 사용.
+            binding.viewTransform.post { updatePreviewViewSize(it) }
             updateCameraConfiguration()
         }
         collectLatestStateFlow(cameraViewModel.cameraSelector) {
@@ -201,11 +211,33 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }
     }
 
-    private fun updatePreviewViewSize() {
-        val (newWidth, newHeight) = cameraViewModel.calculatePreviewViewSize()
-        binding.previewView.layoutParams = binding.previewView.layoutParams.apply {
-            if (newWidth > 0) this.width = newWidth
-            if (newHeight > 0) this.height = newHeight
+    private fun updatePreviewViewSize(aspectRatio: CameraViewModel.AspectRatio) {
+        val transformView = binding.viewTransform
+        val constraintLayout = transformView.parent as ConstraintLayout
+        val transition = AutoTransition().apply {
+            duration = 300
+            addListener(object : TransitionListenerAdapter() {
+                override fun onTransitionEnd(transition: Transition) {
+                    super.onTransitionEnd(transition)
+                    lifecycleScope.launch {
+                        delay(620)
+                        transformView.visibility = View.INVISIBLE
+                    }
+                }
+            })
+        }
+
+        // 현재 보이는 이미지의 블러화된 Bitmap을 받아와서 viewTransform을 변경.
+        val currentImage = cameraViewModel.currentBlurImage.value
+        transformView.background = BitmapDrawable(transformView.resources, currentImage)
+
+        transformView.visibility = View.VISIBLE
+        TransitionManager.beginDelayedTransition(constraintLayout, transition)
+        transformView.layoutParams = when (aspectRatio) {
+            CameraViewModel.AspectRatio.RATIO_16_9 -> binding.view916.layoutParams
+            CameraViewModel.AspectRatio.RATIO_3_4 -> binding.view34.layoutParams
+            CameraViewModel.AspectRatio.RATIO_1_1 -> binding.view11.layoutParams
+            CameraViewModel.AspectRatio.RATIO_FULL -> binding.viewFull.layoutParams
         }
     }
 

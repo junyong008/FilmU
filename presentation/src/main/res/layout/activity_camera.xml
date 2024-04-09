@@ -14,15 +14,62 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/white">
+        android:background="#000000">
+
+        <View
+            android:id="@+id/view_full"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+        <View
+            android:id="@+id/view_9_16"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintDimensionRatio="9:16"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+        <View
+            android:id="@+id/view_3_4"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintVertical_bias="1"
+            app:layout_constraintDimensionRatio="3:4"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toTopOf="@+id/view2"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+        <View
+            android:id="@+id/view_1_1"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintBottom_toTopOf="@+id/view2"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <androidx.camera.view.PreviewView
             android:id="@+id/previewView"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="0dp"
+            app:layout_constraintEnd_toEndOf="@+id/view_transform"
+            app:layout_constraintStart_toStartOf="@+id/view_transform"
+            app:layout_constraintBottom_toBottomOf="@+id/view_transform"
+            app:layout_constraintTop_toTopOf="@+id/view_transform"/>
+
+        <View
+            android:id="@+id/view_transform"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="invisible"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toTopOf="parent"/>
 
         <androidx.appcompat.widget.AppCompatImageView
@@ -39,17 +86,18 @@
             android:id="@+id/flashView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#FFFFFF"
+            android:background="#000000"
             android:visibility="gone"/>
 
         <View
             android:id="@+id/view2"
-            android:layout_width="match_parent"
-            android:layout_height="200dp"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
             android:background="#4D000000"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintDimensionRatio="H,16:9" />
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/textView_test"
@@ -58,54 +106,65 @@
             android:text="TEST"
             android:textColor="#FFFFFF"
             android:textSize="25sp"
-            app:layout_constraintBottom_toTopOf="@+id/button_take_photo"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/switch_mode_before_image"
-            android:layout_width="50dp"
-            android:layout_height="50dp"
-            android:text="MODE"
-            android:textSize="9dp"
-            android:onClick="@{() -> cameraViewModel.changeBeforeImage()}"
-            app:layout_constraintBottom_toBottomOf="@+id/view2"
-            app:layout_constraintEnd_toStartOf="@+id/button_take_photo"
-            app:layout_constraintStart_toStartOf="@+id/view2"
-            app:layout_constraintTop_toTopOf="@+id/view2" />
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/constraintLayout_mainKeys"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toBottomOf="@+id/view_9_16"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/view2">
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/button_take_photo"
-            android:layout_width="70dp"
-            android:layout_height="70dp"
-            android:background="@drawable/button_white_circle"
-            app:layout_constraintBottom_toBottomOf="@+id/view2"
-            app:layout_constraintEnd_toEndOf="@+id/view2"
-            app:layout_constraintStart_toStartOf="@+id/view2"
-            app:layout_constraintTop_toTopOf="@+id/view2" />
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/switch_mode_before_image"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
+                android:onClick="@{() -> cameraViewModel.changeBeforeImage()}"
+                android:text="MODE"
+                android:textSize="9dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/button_take_photo"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
-        <com.yjy.presentation.util.CircularProgressBar
-            android:id="@+id/progress_similarity"
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            app:progressColor="#FFFFFF"
-            app:backgroundColor="#CCCCCC"
-            app:strokeWidth="3dp"
-            app:layout_constraintBottom_toBottomOf="@+id/view2"
-            app:layout_constraintEnd_toEndOf="@+id/view2"
-            app:layout_constraintStart_toStartOf="@+id/view2"
-            app:layout_constraintTop_toTopOf="@+id/view2" />
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/button_take_photo"
+                android:layout_width="70dp"
+                android:layout_height="70dp"
+                android:background="@drawable/button_white_circle"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/button_flip_camera_selector"
-            android:layout_width="50dp"
-            android:layout_height="50dp"
-            android:text="FLIP"
-            android:textSize="10dp"
-            android:onClick="@{() -> cameraViewModel.flipCameraSelector()}"
-            app:layout_constraintBottom_toBottomOf="@+id/view2"
-            app:layout_constraintEnd_toEndOf="@+id/view2"
-            app:layout_constraintStart_toEndOf="@+id/button_take_photo"
-            app:layout_constraintTop_toTopOf="@+id/view2" />
+            <com.yjy.presentation.util.CircularProgressBar
+                android:id="@+id/progress_similarity"
+                android:layout_width="100dp"
+                android:layout_height="100dp"
+                app:backgroundColor="#CCCCCC"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:progressColor="#FFFFFF"
+                app:strokeWidth="3dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/button_flip_camera_selector"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
+                android:onClick="@{() -> cameraViewModel.flipCameraSelector()}"
+                android:text="FLIP"
+                android:textSize="10dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/button_take_photo"
+                app:layout_constraintTop_toTopOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <LinearLayout
             android:id="@+id/linearLayout_aspectRatio"

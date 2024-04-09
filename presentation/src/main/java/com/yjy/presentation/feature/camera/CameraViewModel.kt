@@ -5,7 +5,6 @@ import android.media.ExifInterface
 import android.net.Uri
 import android.util.Log
 import android.util.Rational
-import androidx.camera.core.AspectRatio
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageProxy
@@ -14,10 +13,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yjy.domain.repository.MediaRepository
 import com.yjy.presentation.util.DisplayManager
-import com.yjy.presentation.util.flipHorizontally
-import com.yjy.presentation.util.rotate
-import com.yjy.presentation.util.toBitmap
-import com.yjy.presentation.util.toMat
+import com.yjy.presentation.util.ImageUtils.cropMat
+import com.yjy.presentation.util.ImageUtils.flipHorizontally
+import com.yjy.presentation.util.ImageUtils.rotate
+import com.yjy.presentation.util.ImageUtils.rotateMat
+import com.yjy.presentation.util.ImageUtils.toBitmap
+import com.yjy.presentation.util.ImageUtils.toMat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -60,10 +61,13 @@ class CameraViewModel @Inject constructor(
     private val _beforeImage = MutableStateFlow<BeforeImage?>(null)
     val beforeImage: StateFlow<BeforeImage?> = _beforeImage.asStateFlow()
 
+    private val _currentBlurImage = MutableStateFlow<Bitmap?>(null)
+    val currentBlurImage: StateFlow<Bitmap?> = _currentBlurImage.asStateFlow()
+
     private val _autoCaptureProgress = MutableStateFlow(0f)
     val autoCaptureProgress: StateFlow<Float> = _autoCaptureProgress.asStateFlow()
 
-    private val _aspectRatio = MutableStateFlow(AspectRatio.RATIO_16_9)
+    private val _aspectRatio = MutableStateFlow(AspectRatio.RATIO_FULL)
     val aspectRatio: StateFlow<AspectRatio> = _aspectRatio.asStateFlow()
 
     private val _cameraSelector = MutableStateFlow(CameraSelector.DEFAULT_BACK_CAMERA)
@@ -120,7 +124,8 @@ class CameraViewModel @Inject constructor(
     private fun getEdgeImageFromBitmap(bitmap: Bitmap): Bitmap {
         val mat = bitmap.toMat()
         Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY)
-        Imgproc.GaussianBlur(mat, mat, Size(17.0, 17.0), 3.0)
+        // Imgproc.GaussianBlur(mat, mat, Size(17.0, 17.0), 3.0)
+        Imgproc.medianBlur(mat, mat, 15)
         Imgproc.Canny(mat, mat, 0.0, 100.0)
         val contoursMat = getContours(mat)
         val resultBitmap = contoursMat.toBitmap()
@@ -148,18 +153,39 @@ class CameraViewModel @Inject constructor(
 
     fun analysisImageProxy(imageProxy: ImageProxy) {
 
-        // imageProxy를 Mat로 변환 + 보이는 바와 같이 보정작업
-        val currentImage = imageProxy.toMat().rotate(imageProxy.imageInfo.rotationDegrees)
-        if (cameraSelector.value == CameraSelector.DEFAULT_FRONT_CAMERA)
-            Core.flip(currentImage, currentImage, 1)
+        // imageProxy를 preview로 보는 바와 같이 보정작업 (자료형 변환 + 회전 + 크롭)
+        val currentMat = adjustImageProxy(imageProxy) ?: return
+        setCurrentBlurImage(currentMat) // 현재 보이는 이미지를 blur화하여 상태 저장
 
+        // 유사도 분석이 가능하면 유사도 분석 실시.
         if (beforeImage.value != null && beforeImage.value !is BeforeImage.None) {
-            compareWithBeforeImage(currentImage)
+            Imgproc.cvtColor(currentMat, currentMat, Imgproc.COLOR_BGR2GRAY)
+            compareWithBeforeImage(currentMat)
         }
 
         // TODO: yolo 손바닥 인식
+        currentMat.release()
+    }
 
-        currentImage.release()
+    // imageProxy를 preview로 보는 바와 같이 보정작업 (자료형 변환 + 회전 + 크롭)
+    private fun adjustImageProxy(imageProxy: ImageProxy): Mat? {
+        val currentMat = imageProxy.toMat() ?: return null
+        rotateMat(currentMat, currentMat, imageProxy.imageInfo.rotationDegrees)
+        if (cameraSelector.value == CameraSelector.DEFAULT_FRONT_CAMERA) Core.flip(currentMat, currentMat, 1)
+        when (aspectRatio.value) {
+            AspectRatio.RATIO_1_1 -> Rational(1, 1)
+            AspectRatio.RATIO_FULL -> Rational(displayManager.getScreenSize().first, displayManager.getScreenSize().second)
+            else -> null
+        }?.let { cropMat(currentMat, currentMat, it) }
+        return currentMat
+    }
+
+    private fun setCurrentBlurImage(currentMat: Mat) {
+        val blurMat = Mat()
+        currentMat.copyTo(blurMat)
+        Imgproc.blur(blurMat, blurMat, Size(200.0, 200.0))
+        _currentBlurImage.value = blurMat.toBitmap()
+        blurMat.release()
     }
 
     private fun compareWithBeforeImage(currentMat: Mat) {
@@ -272,22 +298,6 @@ class CameraViewModel @Inject constructor(
         }
     }
 
-    fun calculatePreviewViewSize(): Pair<Int, Int> {
-        var previewViewWidth = 0
-        var previewViewHeight = 0
-        val (screenWidth, screenHeight) = displayManager.getScreenSize()
-        when(aspectRatio.value) {
-            AspectRatio.RATIO_16_9 -> previewViewHeight = (screenWidth * 16) / 9
-            AspectRatio.RATIO_3_4 -> previewViewHeight = (screenWidth * 4) / 3
-            AspectRatio.RATIO_1_1 -> previewViewHeight = screenWidth
-            AspectRatio.RATIO_FULL -> {
-                previewViewWidth = screenWidth
-                previewViewHeight = screenHeight
-            }
-        }
-        return Pair(previewViewWidth, previewViewHeight)
-    }
-
     override fun onCleared() {
         super.onCleared()
         analyzeImage?.release()
@@ -320,7 +330,7 @@ class CameraViewModel @Inject constructor(
     enum class AspectRatio { RATIO_16_9, RATIO_3_4, RATIO_1_1, RATIO_FULL }
 
     companion object {
-        private const val MAX_SIMILARITY_TO_MATCH = 0.25
+        private const val MAX_SIMILARITY_TO_MATCH = 0.03
         private const val AUTO_CAPTURE_DURATION = 5000L
         private const val PROGRESS_UPDATE_INTERVAL = 100L
     }
