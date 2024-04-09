@@ -55,6 +55,8 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     add("implementation", libs.findLibrary("material").get())
 
                     add("testImplementation", libs.findLibrary("junit").get())
+                    add("testImplementation", libs.findLibrary("mockk").get())
+                    add("testImplementation", libs.findLibrary("coroutines").get())
                     add("androidTestImplementation", libs.findLibrary("androidJunit").get())
                     add("androidTestImplementation", libs.findLibrary("espresso").get())
 

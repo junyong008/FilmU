@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
 import android.util.Rational
+import androidx.annotation.VisibleForTesting
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageProxy
@@ -229,6 +230,27 @@ class CameraViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         analyzeImage?.release()
+    }
+
+    // 테스트용 함수들
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun setBeforeImagesForTest(beforeImage: BeforeImage, contour: Bitmap?, origin: Bitmap?) {
+        _beforeImage.value = beforeImage
+        contour?.let { contourBeforeImage = it }
+        origin?.let { oriBeforeImage = it }
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun getIsImageSameForTest(): Boolean = isImageSame
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun setCameraSelectorForTest(cameraSelector: CameraSelector) {
+        _cameraSelector.value = cameraSelector
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun setAspectRatioForTest(aspectRatio: AspectRatio) {
+        _aspectRatio.value = aspectRatio
     }
 
     private suspend fun postMessage(msg: CameraMessage) {
