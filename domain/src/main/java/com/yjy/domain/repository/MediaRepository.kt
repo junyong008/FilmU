@@ -8,8 +8,10 @@ import java.io.File
 typealias MediaScanCompleteCallback = (String, Uri) -> Unit
 
 interface MediaRepository {
+    fun getFileFromUri(uri: Uri): File
+    fun getUriFromFile(file: File): Uri
     fun getBitmapFromUri(uri: Uri): Bitmap?
     fun getExifInterfaceFromUri(uri: Uri): ExifInterface?
-    fun createImageFile(): File
-    fun scanMediaFile(file: File, callback: MediaScanCompleteCallback?)
+    fun createTempImageFile(): File
+    fun moveToOfficialDirectory(file: File): File
 }

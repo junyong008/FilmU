@@ -7,7 +7,8 @@ import android.media.ExifInterface
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Environment
-import com.yjy.domain.repository.MediaScanCompleteCallback
+import androidx.core.net.toFile
+import androidx.core.net.toUri
 import java.io.File
 import java.io.InputStream
 import java.text.SimpleDateFormat
@@ -16,6 +17,10 @@ import java.util.Locale
 import javax.inject.Inject
 
 class MediaLocalDataSourceImpl @Inject constructor(private val context: Context) : MediaLocalDataSource {
+
+    override fun getFileFromUri(uri: Uri): File = uri.toFile()
+
+    override fun getUriFromFile(file: File): Uri = file.toUri()
 
     override fun getBitmapFromUri(uri: Uri): Bitmap? {
         return safeOperation {
@@ -32,22 +37,29 @@ class MediaLocalDataSourceImpl @Inject constructor(private val context: Context)
         }
     }
 
-    override fun createImageFile(): File {
+    override fun createTempImageFile(): File {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val imageFileName = "FilmU_${timeStamp}.jpg"
-        val storageDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "FilmU")
-        if (!storageDir.exists()) { storageDir.mkdirs() }
-        return File(storageDir, imageFileName)
+        val imageFileName = "TEMP_FilmU_$timeStamp.jpg"
+        val storageDir = context.cacheDir
+        return File.createTempFile(imageFileName, ".jpg", storageDir)
     }
 
-    override fun scanMediaFile(file: File, callback: MediaScanCompleteCallback?) {
-        MediaScannerConnection.scanFile(
-            context,
-            arrayOf(file.absolutePath),
-            null
-        ) { path, uri ->
-            callback?.invoke(path, uri)
-        }
+    override fun moveToOfficialDirectory(file: File): File {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val imageFileName = "FilmU_$timeStamp.jpg"
+        val storageDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "FilmU")
+        if (!storageDir.exists()) { storageDir.mkdirs() }
+
+        val officialFile = File(storageDir, imageFileName)
+        file.copyTo(officialFile, overwrite = true)
+        file.delete()
+
+        scanMediaFile(officialFile)
+        return officialFile
+    }
+
+    private fun scanMediaFile(file: File) {
+        MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
     }
 
     private fun <T> safeOperation(block: () -> T): T? {

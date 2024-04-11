@@ -1,6 +1,7 @@
 package com.yjy.presentation.feature.camera
 
 import android.Manifest
+import android.content.Intent
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
@@ -32,9 +33,11 @@ import com.github.logansdk.permission.PermissionManager
 import com.yjy.presentation.R
 import com.yjy.presentation.base.BaseActivity
 import com.yjy.presentation.databinding.ActivityCameraBinding
+import com.yjy.presentation.feature.preview.PreviewActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -183,6 +186,7 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    startPreviewActivity(imageFile)
                 }
                 override fun onError(exception: ImageCaptureException) {
                     showToast(getString(R.string.fail_to_take_photo))
@@ -205,6 +209,13 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         Handler(Looper.getMainLooper()).postDelayed({
             binding.flashView.visibility = View.GONE
         }, CAPTURE_EFFECT_DURATION)
+    }
+
+    private fun startPreviewActivity(imageFile: File) {
+        val imageUri = Uri.fromFile(imageFile)
+        val intent = Intent(this, PreviewActivity::class.java)
+        intent.putExtra("capturedImage", imageUri)
+        startActivity(intent)
     }
 
     override fun observeStateFlows() {

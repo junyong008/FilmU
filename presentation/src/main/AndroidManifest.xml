@@ -11,12 +11,12 @@
     <application
         android:name=".MyApplication"
         android:allowBackup="true"
-        tools:replace="android:allowBackup"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.FilmU.NoActionBar">
+        android:theme="@style/Theme.FilmU.NoActionBar"
+        tools:replace="android:allowBackup">
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -29,13 +29,15 @@
         </provider>
 
         <activity
-            android:name=".feature.camera.CameraActivity"
-            android:theme="@style/Theme.FilmU.FullScreen"
+            android:name=".feature.preview.PreviewActivity"
+            android:exported="false"
             android:screenOrientation="portrait"
-            android:exported="false" />
+            android:theme="@style/Theme.FilmU.FullScreen"/>
         <activity
-            android:name=".feature.example.ExampleActivity"
-            android:exported="false" />
+            android:name=".feature.camera.CameraActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.FilmU.FullScreen" />
         <activity
             android:name=".feature.main.MainActivity"
             android:exported="true">
