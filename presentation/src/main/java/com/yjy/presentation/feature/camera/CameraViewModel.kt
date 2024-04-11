@@ -3,7 +3,6 @@ package com.yjy.presentation.feature.camera
 import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
-import android.util.Log
 import android.util.Rational
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -144,7 +143,6 @@ class CameraViewModel @Inject constructor(
         val present = imageProcessor.applyGrayscaleOtsuThreshold(presentImage)
         val past = pastImageForAnalyze ?: createPastImageForAnalyze(presentImage)
         val similarity = imageProcessor.calculateImageSimilarity(present, past)
-        Log.d("SMSM", similarity.toString())
         return similarity < MAX_SIMILARITY_TO_MATCH
     }
 

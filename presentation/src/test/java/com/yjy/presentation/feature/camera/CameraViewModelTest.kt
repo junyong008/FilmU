@@ -10,10 +10,8 @@ import com.yjy.domain.repository.MediaRepository
 import com.yjy.presentation.util.DisplayManager
 import com.yjy.presentation.util.ImageProcessor
 import com.yjy.presentation.util.ImageUtils
-import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,32 +58,32 @@ class CameraViewModelTest {
     }
 
     @Test
-    fun `initBeforeImage_uri를 받아 beforeImage와 aspectRatio를 변경`() = runTest(testDispatcher) {
+    fun `initPastImage_uri를 받아 pastImage와 aspectRatio를 변경`() = runTest(testDispatcher) {
         // Given
         val uri = mockk<Uri>(relaxed = true)
         val bitmap = mockk<Bitmap>(relaxed = true)
         val exifInterface = mockk<ExifInterface>(relaxed = true)
         val rotatedImage = mockk<Bitmap>(relaxed = true)
-        val edgeImage = mockk<Bitmap>(relaxed = true)
+        val contourImage = mockk<Bitmap>(relaxed = true)
         coEvery { mediaRepository.getBitmapFromUri(uri) } returns bitmap
         coEvery { mediaRepository.getExifInterfaceFromUri(uri) } returns exifInterface
         coEvery { imageUtils.rotateBitmapAccordingToExif(bitmap, any()) } returns rotatedImage
         coEvery { rotatedImage.width } returns 900
         coEvery { rotatedImage.height } returns 1600
-        coEvery { imageProcessor.getEdgeImageFromBitmap(rotatedImage) } returns edgeImage
+        coEvery { imageProcessor.getContourImageFromBitmap(rotatedImage) } returns contourImage
         coEvery { exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED) } returns ExifInterface.ORIENTATION_ROTATE_90
         // When
-        viewModel.initBeforeImage(uri)
+        viewModel.initPastImage(uri)
         advanceUntilIdle() // 비동기 작업이 끝날때 까지 대기
         // Then
-        val expectedBeforeImage = CameraViewModel.BeforeImage.Original(rotatedImage)
+        val expectedPastImage = CameraViewModel.PastImage.Original(rotatedImage)
         val expectedAspectRatio = CameraViewModel.AspectRatio.RATIO_16_9
-        assertEquals(expectedBeforeImage, viewModel.beforeImage.value)
+        assertEquals(expectedPastImage, viewModel.pastImage.value)
         assertEquals(expectedAspectRatio, viewModel.aspectRatio.value)
     }
 
     @Test
-    fun `initBeforeImage_getBitmapFromUri 또는 getExifInterfaceFromUri 가 null이면 message를 CameraMessage_FailedToAccessFile로 변경`() = runTest(testDispatcher) {
+    fun `initPastImage_getBitmapFromUri 또는 getExifInterfaceFromUri 가 null이면 message를 CameraMessage_FailedToAccessFile로 변경`() = runTest(testDispatcher) {
         // Given
         val uri = mockk<Uri>(relaxed = true)
         coEvery { mediaRepository.getBitmapFromUri(uri) } returns null
@@ -95,86 +93,58 @@ class CameraViewModelTest {
             viewModel.message.collect { messages.add(it) }
         }
         // When
-        viewModel.initBeforeImage(uri)
+        viewModel.initPastImage(uri)
         advanceUntilIdle()
         // Then
         assertTrue(messages.contains(CameraViewModel.CameraMessage.FailedToAccessFile))
-
         job.cancel()
     }
 
     @Test
-    fun `changeBeforeImage_호출할 때마다 beforeImage 값을 순환`() = runTest {
+    fun `changePastImage_호출할 때마다 beforeImage 값을 순환`() = runTest {
         // Given
-        val contourImage = mockk<Bitmap>(relaxed = true)
-        val originalImage = mockk<Bitmap>(relaxed = true)
-        viewModel.setBeforeImagesForTest(CameraViewModel.BeforeImage.Original(originalImage), contourImage, originalImage)
+        val pastOriginalImage = mockk<Bitmap>(relaxed = true)
+        val pastContourImage = mockk<Bitmap>(relaxed = true)
+        val pastImage = CameraViewModel.PastImage.None
         // When & Then
-        // Original to Contour
-        viewModel.changeBeforeImage()
-        assertTrue(viewModel.beforeImage.value is CameraViewModel.BeforeImage.Contour)
-        // Contour to None
-        viewModel.changeBeforeImage()
-        assertTrue(viewModel.beforeImage.value is CameraViewModel.BeforeImage.None)
-        // None to Original
-        viewModel.changeBeforeImage()
-        assertTrue(viewModel.beforeImage.value is CameraViewModel.BeforeImage.Original)
+        viewModel.changePastImage(pastImage, pastOriginalImage, pastContourImage)
+        assertTrue(viewModel.pastImage.value is CameraViewModel.PastImage.Original)
+        viewModel.changePastImage(viewModel.pastImage.value, pastOriginalImage, pastContourImage)
+        assertTrue(viewModel.pastImage.value is CameraViewModel.PastImage.Contour)
+        viewModel.changePastImage(viewModel.pastImage.value, pastOriginalImage, pastContourImage)
+        assertTrue(viewModel.pastImage.value is CameraViewModel.PastImage.None)
     }
 
     @Test
     fun `analysisImageProxy_이미지 프록시를 분석하여 현재 블러 이미지를 설정`() = runTest {
         // Given
         val imageProxy: ImageProxy = mockk(relaxed = true)
-        val currentMat: Mat = mockk(relaxed = true)
-        val blurredImage: Bitmap = mockk(relaxed = true)
-        every { imageProcessor.adjustImageProxy(any(), any(), any()) } returns currentMat
-        every { imageProcessor.getBlurredImageFromMat(currentMat) } returns blurredImage
+        val pastImage: CameraViewModel.PastImage = mockk(relaxed = true)
+        val pastImageForAnalyze: Mat = mockk(relaxed = true)
+        val presentImage: Mat = mockk(relaxed = true)
+        val presentBlurImage: Bitmap = mockk(relaxed = true)
+        every { imageProcessor.adjustImageProxy(imageProxy, any(), any()) } returns presentImage
+        every { imageProcessor.getBlurImageFromMat(presentImage) } returns presentBlurImage
         // When
-        viewModel.analysisImageProxy(imageProxy)
+        viewModel.analysisImageProxy(imageProxy, pastImage, pastImageForAnalyze)
         // Then
-        assertEquals(blurredImage, viewModel.currentBlurImage.value)
-    }
-
-    @Test
-    fun `analysisImageProxy_이미지 프록시 분석 시 기존 이미지가 있으면 유사도 분석을 실행`() = runTest {
-        // Given
-        val beforeImage: Bitmap = mockk(relaxed = true)
-        val imageProxy: ImageProxy = mockk(relaxed = true)
-        val currentMat: Mat = mockk(relaxed = true)
-        val resizedImage: Bitmap = mockk(relaxed = true)
-        val analyzeImage: Mat = mockk(relaxed = true)
-        val resizedSize = Pair(800, 600)
-        viewModel.setBeforeImagesForTest(CameraViewModel.BeforeImage.Original(beforeImage), null, beforeImage)
-        every { imageUtils.getMatSize(currentMat) } returns resizedSize
-        every { imageUtils.resizeBitmap(beforeImage, resizedSize.first, resizedSize.second) } returns resizedImage
-        every { imageUtils.bitmapToMat(any()) } returns analyzeImage
-        every { imageProcessor.applyGrayscaleOtsuThreshold(any()) } just Runs
-        every { imageProcessor.adjustImageProxy(any(), any(), any()) } returns currentMat
-        every { imageProcessor.calculateImageSimilarity(any(), any()) } returns 0.01
-        // When
-        viewModel.analysisImageProxy(imageProxy)
-        // Then
-        assertTrue(viewModel.getIsImageSameForTest())
+        assertEquals(presentBlurImage, viewModel.presentBlurImage.value)
     }
 
     @Test
     fun `analysisImageProxy_유사도 분석 후 일치율이 유지되면 진행율 증가`() = runTest {
         // Given
-        val beforeImage: Bitmap = mockk(relaxed = true)
         val imageProxy: ImageProxy = mockk(relaxed = true)
-        val currentMat: Mat = mockk(relaxed = true)
-        val resizedImage: Bitmap = mockk(relaxed = true)
-        val analyzeImage: Mat = mockk(relaxed = true)
-        val resizedSize = Pair(800, 600)
-        viewModel.setBeforeImagesForTest(CameraViewModel.BeforeImage.Original(beforeImage), null, beforeImage)
-        every { imageUtils.getMatSize(currentMat) } returns resizedSize
-        every { imageUtils.resizeBitmap(beforeImage, resizedSize.first, resizedSize.second) } returns resizedImage
-        every { imageUtils.bitmapToMat(any()) } returns analyzeImage
-        every { imageProcessor.applyGrayscaleOtsuThreshold(any()) } just Runs
-        every { imageProcessor.adjustImageProxy(any(), any(), any()) } returns currentMat
+        val pastImage: CameraViewModel.PastImage = mockk(relaxed = true)
+        val pastImageForAnalyze: Mat = mockk(relaxed = true)
+        val presentImage: Mat = mockk(relaxed = true)
+        val presentBlurImage: Bitmap = mockk(relaxed = true)
+        every { imageProcessor.adjustImageProxy(imageProxy, any(), any()) } returns presentImage
+        every { imageProcessor.getBlurImageFromMat(presentImage) } returns presentBlurImage
+        every { imageProcessor.applyGrayscaleOtsuThreshold(any()) } returns presentImage
         every { imageProcessor.calculateImageSimilarity(any(), any()) } returns 0.01
         // When
-        viewModel.analysisImageProxy(imageProxy)
+        viewModel.analysisImageProxy(imageProxy, pastImage, pastImageForAnalyze)
         advanceTimeBy(6000) // 6초 동안 진행률 업데이트
         // Then
         assertEquals(100f, viewModel.autoCaptureProgress.value)
@@ -184,82 +154,61 @@ class CameraViewModelTest {
     fun `prepareImageCapture_이미지 파일 및 메타 데이터 생성`() = runTest {
         // Given
         val expectedFile = File("path/to/image.jpg")
-        every { mediaRepository.createImageFile() } returns expectedFile
-        viewModel.setCameraSelectorForTest(CameraSelector.DEFAULT_FRONT_CAMERA)
+        every { mediaRepository.createTempImageFile() } returns expectedFile
         // When
-        val (outputFileOptions, imageFile) = viewModel.prepareImageCapture()
+        val (outputFileOptions, imageFile) = viewModel.prepareImageCapture(CameraSelector.DEFAULT_FRONT_CAMERA)
         // Then
         assertEquals(expectedFile, imageFile)
         assertTrue(outputFileOptions.metadata.isReversedHorizontal)
     }
 
     @Test
-    fun `selectAspectRatio_비율 선택`() {
-        // Given
-        val expectedAspectRatio = CameraViewModel.AspectRatio.RATIO_16_9
-        // When
-        viewModel.selectAspectRatio(expectedAspectRatio)
-        // Then
-        assertEquals(expectedAspectRatio, viewModel.aspectRatio.value)
-    }
-
-    @Test
     fun `flipCameraSelector_cameraSelector를 반대로 변경`() {
-        // Given
-        viewModel.setCameraSelectorForTest(CameraSelector.DEFAULT_BACK_CAMERA)
-
-        // When & Then
         // Back to Front
-        viewModel.flipCameraSelector()
+        viewModel.flipCameraSelector(CameraSelector.DEFAULT_BACK_CAMERA)
         assertEquals(CameraSelector.DEFAULT_FRONT_CAMERA, viewModel.cameraSelector.value)
         // Front to Back
-        viewModel.flipCameraSelector()
+        viewModel.flipCameraSelector(CameraSelector.DEFAULT_FRONT_CAMERA)
         assertEquals(CameraSelector.DEFAULT_BACK_CAMERA, viewModel.cameraSelector.value)
     }
 
     @Test
-    fun `getImageCaptureConfig_현재 aspectRatio에 따른 적절한 AspectRatioStrategy와 cropAspectRatio 결정`() = runTest {
+    fun `getImageCaptureConfig_aspectRatio에 따른 적절한 AspectRatioStrategy와 cropAspectRatio 결정`() = runTest {
         // Given
         val displayWidth = 1080
         val displayHeight = 1920
         every { displayManager.getScreenSize() } returns Pair(displayWidth, displayHeight)
 
         // When & Then
-        viewModel.setAspectRatioForTest(CameraViewModel.AspectRatio.RATIO_16_9)
-        var config = viewModel.getImageCaptureConfig()
+        var config = viewModel.getImageCaptureConfig(CameraViewModel.AspectRatio.RATIO_16_9)
         assertEquals(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY, config.first)
         assertNull(config.second)
 
-        viewModel.setAspectRatioForTest(CameraViewModel.AspectRatio.RATIO_3_4)
-        config = viewModel.getImageCaptureConfig()
+        config = viewModel.getImageCaptureConfig(CameraViewModel.AspectRatio.RATIO_3_4)
         assertEquals(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY, config.first)
         assertNull(config.second)
 
-        viewModel.setAspectRatioForTest(CameraViewModel.AspectRatio.RATIO_1_1)
-        config = viewModel.getImageCaptureConfig()
+        config = viewModel.getImageCaptureConfig(CameraViewModel.AspectRatio.RATIO_1_1)
         assertEquals(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY, config.first)
         assertNotNull(config.second)
 
-        viewModel.setAspectRatioForTest(CameraViewModel.AspectRatio.RATIO_FULL)
-        config = viewModel.getImageCaptureConfig()
+        config = viewModel.getImageCaptureConfig(CameraViewModel.AspectRatio.RATIO_FULL)
         assertEquals(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY, config.first)
         assertNotNull(config.second)
     }
 
     @Test
-    fun `getImageAnalysisConfig_현재 aspectRatio에 따른 적절한 AspectRatioStrategy 반환`() {
+    fun `getImageAnalysisConfig_aspectRatio에 따른 적절한 AspectRatioStrategy 반환`() {
+        // Given
         val scenarios = listOf(
             CameraViewModel.AspectRatio.RATIO_16_9 to AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY,
             CameraViewModel.AspectRatio.RATIO_3_4 to AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY,
             CameraViewModel.AspectRatio.RATIO_1_1 to AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY,
             CameraViewModel.AspectRatio.RATIO_FULL to AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
         )
-
         scenarios.forEach { (inputAspectRatio, expectedStrategy) ->
-            // Given
-            viewModel.setAspectRatioForTest(inputAspectRatio)
             // When
-            val result = viewModel.getImageAnalysisConfig()
+            val result = viewModel.getImageAnalysisConfig(inputAspectRatio)
             // Then
             assertEquals(expectedStrategy, result)
         }
