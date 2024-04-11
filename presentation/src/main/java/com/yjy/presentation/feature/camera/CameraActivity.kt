@@ -22,6 +22,7 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.transition.AutoTransition
 import androidx.transition.Transition
@@ -43,26 +44,34 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
     private val cameraViewModel: CameraViewModel by viewModels()
     private lateinit var cameraExecutor: ExecutorService
     private var imageCapture: ImageCapture? = null
-    private var progressHandler = Handler(Looper.getMainLooper())
-    private var progressRunnable: Runnable? = null
-
     override fun initViewModel() {
         binding.cameraViewModel = cameraViewModel
     }
 
     override fun initView(savedInstanceState: Bundle?) {
+        setDisplayCutoutMode()
+        initPastImage()
+        cameraExecutor = Executors.newSingleThreadExecutor()
+    }
 
-        // 상태바 영역까지 확장하여 사용
+    // 상태바 영역까지 확장하여 사용
+    private fun setDisplayCutoutMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
+    }
 
-        // 기존 이미지가 넘어오는지 체크.
-        val beforeImage: Uri? = intent.extras?.getParcelable("beforeImage")
-        beforeImage?.let { cameraViewModel.initBeforeImage(it) }
-
-        cameraExecutor = Executors.newSingleThreadExecutor()
+    // 기존 이미지가 있는지 체크 (새 프로젝트 or 기존 프로젝트인지 확인하는 겸)
+    private fun initPastImage() {
+        val pastImage: Uri = intent.extras?.getParcelable("pastImage") ?: return
+        cameraViewModel.initPastImage(pastImage)
+        listOf(
+            binding.linearLayoutAspectRatio
+        ).forEach { it.isVisible = false }
+        listOf(
+            binding.buttonChangePastImage
+        ).forEach { it.isVisible = true }
     }
 
     private fun requestPermissions() {
@@ -105,7 +114,7 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
     }
 
     private fun createImageCapture(): ImageCapture {
-        val (aspectRatioStrategy, cropAspectRatio) = cameraViewModel.getImageCaptureConfig()
+        val (aspectRatioStrategy, cropAspectRatio) = cameraViewModel.getImageCaptureConfig(cameraViewModel.aspectRatio.value)
 
         val resolutionSelector = ResolutionSelector.Builder()
             .setAspectRatioStrategy(aspectRatioStrategy)
@@ -121,7 +130,7 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
     }
 
     private fun createImageAnalysis(): ImageAnalysis {
-        val aspectRatioStrategy = cameraViewModel.getImageAnalysisConfig()
+        val aspectRatioStrategy = cameraViewModel.getImageAnalysisConfig(cameraViewModel.aspectRatio.value)
 
         val resolutionSelector = ResolutionSelector.Builder()
             .setAspectRatioStrategy(aspectRatioStrategy)
@@ -132,7 +141,11 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
             .build()
 
         imageAnalyzer.setAnalyzer(cameraExecutor, ImageAnalysis.Analyzer { imageProxy ->
-            cameraViewModel.analysisImageProxy(imageProxy)
+            cameraViewModel.analysisImageProxy(
+                imageProxy,
+                cameraViewModel.pastImage.value,
+                cameraViewModel.pastImageForAnalyze.value
+            )
             imageProxy.close()
         })
         return imageAnalyzer
@@ -140,31 +153,39 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
 
     override fun setListener() {
         binding.buttonTakePhoto.setOnClickListener { view ->
-            animateTakePhoto(view)
+            animateShrink(view)
             takePhoto()
+        }
+        binding.buttonChangePastImage.setOnClickListener {
+            cameraViewModel.changePastImage(
+                cameraViewModel.pastImage.value,
+                cameraViewModel.pastOriginalImage.value,
+                cameraViewModel.pastContourImage.value
+            )
+        }
+        binding.buttonFlipCameraSelector.setOnClickListener {
+            cameraViewModel.flipCameraSelector(cameraViewModel.cameraSelector.value)
         }
     }
 
-    private fun animateTakePhoto(view: View) {
-        val animation = AnimationUtils.loadAnimation(this, R.anim.take_photo)
+    private fun animateShrink(view: View) {
+        val animation = AnimationUtils.loadAnimation(this, R.anim.shrink)
         view.startAnimation(animation)
     }
 
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
-
         vibrate()
         flashScreen()
-        val (outputFileOptions, imageFile) = cameraViewModel.prepareImageCapture()
+        val (outputFileOptions, imageFile) = cameraViewModel.prepareImageCapture(cameraViewModel.cameraSelector.value)
         imageCapture.takePicture(
             outputFileOptions,
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    cameraViewModel.scanMediaFile(imageFile)
                 }
                 override fun onError(exception: ImageCaptureException) {
-                    showToast("${getString(R.string.fail_to_take_photo)} $exception")
+                    showToast(getString(R.string.fail_to_take_photo))
                 }
             }
         )
@@ -195,19 +216,13 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         collectLatestStateFlow(cameraViewModel.cameraSelector) {
             updateCameraConfiguration()
         }
-        collectLatestStateFlow(cameraViewModel.beforeImage) { beforeImage ->
-            beforeImage?.let {
-                val beforeView = binding.imageViewBefore
-                when(beforeImage) {
-                    is CameraViewModel.BeforeImage.Original -> beforeView.alpha = 0.5f
-                    else -> beforeView.alpha = 1f
-                }
-                beforeView.setImageBitmap(beforeImage.getOriginalImage())
-            }
+        collectLatestStateFlow(cameraViewModel.pastImage) { pastImage ->
+            val pastView = binding.imageViewPast
+            pastView.alpha = if (pastImage is CameraViewModel.PastImage.Original) 0.5f else 1f
+            pastView.setImageBitmap(pastImage?.getImage())
         }
         collectLatestStateFlow(cameraViewModel.autoCaptureProgress) {
             binding.progressSimilarity.setProgress(it)
-            if (it >= 100) takePhoto()
         }
     }
 
@@ -228,8 +243,8 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }
 
         // 현재 보이는 이미지의 블러화된 Bitmap을 받아와서 viewTransform을 변경.
-        val currentImage = cameraViewModel.currentBlurImage.value
-        transformView.background = BitmapDrawable(transformView.resources, currentImage)
+        val presentBlurImage = cameraViewModel.presentBlurImage.value
+        transformView.background = BitmapDrawable(transformView.resources, presentBlurImage)
 
         transformView.visibility = View.VISIBLE
         TransitionManager.beginDelayedTransition(constraintLayout, transition)
@@ -250,8 +265,8 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
                 }
             }
         }
-        collectLatestSharedFlow(cameraViewModel.imageCaptured) {
-            showToast("사진 촬영 완료.")
+        collectLatestSharedFlow(cameraViewModel.isProgressCharged) { isProgressCharged ->
+            if (isProgressCharged) takePhoto()
         }
     }
 

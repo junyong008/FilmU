@@ -3,8 +3,8 @@ package com.yjy.presentation.feature.camera
 import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.net.Uri
+import android.util.Log
 import android.util.Rational
-import androidx.annotation.VisibleForTesting
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageProxy
@@ -36,26 +36,32 @@ class CameraViewModel @Inject constructor(
     private val imageUtils: ImageUtils,
 ) : ViewModel() {
 
-    private var analyzeImage: Mat? = null
-    private var oriBeforeImage: Bitmap? = null
-    private var contourBeforeImage: Bitmap? = null
-    private var isImageSame = false
-    private var isProgressStarted = false
+    private var isPresentImgSameWithPastImg = false
+    private var isAutoCaptureProgressStarted = false
 
     private val _message = MutableSharedFlow<CameraMessage>(replay = 0)
     val message: SharedFlow<CameraMessage> = _message
 
-    private val _imageCaptured = MutableSharedFlow<Uri>(replay = 0)
-    val imageCaptured: SharedFlow<Uri> = _imageCaptured
+    private val _pastImage = MutableStateFlow<PastImage?>(null)
+    val pastImage: StateFlow<PastImage?> = _pastImage.asStateFlow()
 
-    private val _beforeImage = MutableStateFlow<BeforeImage?>(null)
-    val beforeImage: StateFlow<BeforeImage?> = _beforeImage.asStateFlow()
+    private val _pastOriginalImage = MutableStateFlow<Bitmap?>(null)
+    val pastOriginalImage: StateFlow<Bitmap?> = _pastOriginalImage.asStateFlow()
 
-    private val _currentBlurImage = MutableStateFlow<Bitmap?>(null)
-    val currentBlurImage: StateFlow<Bitmap?> = _currentBlurImage.asStateFlow()
+    private val _pastContourImage = MutableStateFlow<Bitmap?>(null)
+    val pastContourImage: StateFlow<Bitmap?> = _pastContourImage.asStateFlow()
+
+    private val _pastImageForAnalyze = MutableStateFlow<Mat?>(null)
+    val pastImageForAnalyze: StateFlow<Mat?> = _pastImageForAnalyze.asStateFlow()
+
+    private val _presentBlurImage = MutableStateFlow<Bitmap?>(null)
+    val presentBlurImage: StateFlow<Bitmap?> = _presentBlurImage.asStateFlow()
 
     private val _autoCaptureProgress = MutableStateFlow(0f)
     val autoCaptureProgress: StateFlow<Float> = _autoCaptureProgress.asStateFlow()
+
+    private val _isProgressCharged = MutableSharedFlow<Boolean>(replay = 0)
+    val isProgressCharged: SharedFlow<Boolean> = _isProgressCharged
 
     private val _aspectRatio = MutableStateFlow(AspectRatio.RATIO_FULL)
     val aspectRatio: StateFlow<AspectRatio> = _aspectRatio.asStateFlow()
@@ -63,11 +69,11 @@ class CameraViewModel @Inject constructor(
     private val _cameraSelector = MutableStateFlow(CameraSelector.DEFAULT_BACK_CAMERA)
     val cameraSelector: StateFlow<CameraSelector> = _cameraSelector.asStateFlow()
 
-    fun initBeforeImage(uri: Uri) {
-        if (beforeImage.value != null) return
+    fun initPastImage(initImage: Uri) {
+        if (pastImage.value != null) return
         viewModelScope.launch {
-            val bitmap = mediaRepository.getBitmapFromUri(uri)
-            val exifInterface = mediaRepository.getExifInterfaceFromUri(uri)
+            val bitmap = mediaRepository.getBitmapFromUri(initImage)
+            val exifInterface = mediaRepository.getExifInterfaceFromUri(initImage)
 
             if (bitmap == null || exifInterface == null) {
                 postMessage(CameraMessage.FailedToAccessFile)
@@ -80,13 +86,13 @@ class CameraViewModel @Inject constructor(
             )
 
             // 전면 촬영, 회전 정보를 바탕으로 눈으로 보이는 바와 같이 로드하기 위한 보정 작업.
-            val rotatedImage = imageUtils.rotateBitmapAccordingToExif(bitmap, orientation)
+            val originalImage = imageUtils.rotateBitmapAccordingToExif(bitmap, orientation)
+            val contourImage = imageProcessor.getContourImageFromBitmap(originalImage)
 
-            oriBeforeImage = rotatedImage
-            contourBeforeImage = imageProcessor.getEdgeImageFromBitmap(rotatedImage)
-
-            setAspectRatio(oriBeforeImage!!)
-            _beforeImage.value = BeforeImage.Original(oriBeforeImage!!)
+            setAspectRatio(originalImage)
+            _pastOriginalImage.value = originalImage
+            _pastContourImage.value = contourImage
+            _pastImage.value = PastImage.Original(originalImage)
         }
     }
 
@@ -102,106 +108,109 @@ class CameraViewModel @Inject constructor(
         }
     }
 
-    fun changeBeforeImage() {
-        if(beforeImage.value == null) return
-        _beforeImage.value = when(beforeImage.value) {
-            is BeforeImage.Original -> BeforeImage.Contour(contourBeforeImage!!)
-            is BeforeImage.Contour -> BeforeImage.None
-            else -> BeforeImage.Original(oriBeforeImage!!)
+    fun changePastImage(
+        pastImage: PastImage?,
+        pastOriginalImage: Bitmap?,
+        pastContourImage: Bitmap?
+    ) {
+        if (pastImage == null || pastOriginalImage == null || pastContourImage == null) return
+        _pastImage.value = when (pastImage) {
+            is PastImage.Original -> PastImage.Contour(pastContourImage)
+            is PastImage.Contour -> PastImage.None
+            is PastImage.None -> PastImage.Original(pastOriginalImage)
         }
     }
 
-    fun analysisImageProxy(imageProxy: ImageProxy) {
+    fun analysisImageProxy(
+        imageProxy: ImageProxy,
+        pastImage: PastImage?,
+        pastImageForAnalyze: Mat?,
+    ) {
+        val presentImage = imageProcessor.adjustImageProxy(imageProxy, cameraSelector.value, aspectRatio.value) ?: return
 
-        val currentMat = imageProcessor.adjustImageProxy(imageProxy, cameraSelector.value, aspectRatio.value) ?: return
-        _currentBlurImage.value = imageProcessor.getBlurredImageFromMat(currentMat)
+        // 현재 이미지의 블러화
+        _presentBlurImage.value = imageProcessor.getBlurImageFromMat(presentImage)
 
-        // 유사도 분석이 가능하면 유사도 분석 실시.
-        if (beforeImage.value != null && beforeImage.value !is BeforeImage.None) {
-            compareWithBeforeImage(currentMat)
+        // 과거, 현재 이미지 유사도 분석
+        if (pastImage != null && pastImage !is PastImage.None) {
+            isPresentImgSameWithPastImg = isPresentImageSameWithPastImage(presentImage, pastImageForAnalyze)
+            if (isPresentImgSameWithPastImg) startAutoCaptureProgress()
         }
 
-        // TODO: yolo 손바닥 인식
-        currentMat.release()
+        presentImage.release()
     }
 
-    private fun compareWithBeforeImage(currentMat: Mat) {
-
-        // 분석용 이미지 생성 (원본 beforeImage로부터 자료형 변환 + 크기 조절 + Gray)
-        if (analyzeImage == null) {
-            val (resizeW, resizeH) = imageUtils.getMatSize(currentMat)
-            val resizedImage = imageUtils.resizeBitmap(oriBeforeImage!!, resizeW, resizeH)
-            analyzeImage = imageUtils.bitmapToMat(resizedImage)
-            imageProcessor.applyGrayscaleOtsuThreshold(analyzeImage!!)
-        }
-
-        // 현재 이미지 또한 분석용 이미지와의 색감차이를 이진화로 개선
-        imageProcessor.applyGrayscaleOtsuThreshold(currentMat)
-
-        val similarity = imageProcessor.calculateImageSimilarity(currentMat, analyzeImage!!)
-        isImageSame = (similarity < MAX_SIMILARITY_TO_MATCH)
-        if (isImageSame && !isProgressStarted && beforeImage.value !is BeforeImage.None) startProgress()
+    private fun isPresentImageSameWithPastImage(presentImage: Mat, pastImageForAnalyze: Mat?): Boolean {
+        val present = imageProcessor.applyGrayscaleOtsuThreshold(presentImage)
+        val past = pastImageForAnalyze ?: createPastImageForAnalyze(presentImage)
+        val similarity = imageProcessor.calculateImageSimilarity(present, past)
+        Log.d("SMSM", similarity.toString())
+        return similarity < MAX_SIMILARITY_TO_MATCH
     }
 
-    private fun startProgress() {
-        isProgressStarted = true
+    // 과거 이미지를 현재 이미지의 크기와 색감을 일치화하여 분석용 과거 이미지 생성
+    private fun createPastImageForAnalyze(presentImage: Mat): Mat {
+        val (resizeW, resizeH) = imageUtils.getMatSize(presentImage)
+        val resizedImage = imageUtils.resizeBitmap(pastOriginalImage.value!!, resizeW, resizeH)
+        val result = imageUtils.bitmapToMat(resizedImage)
+        imageProcessor.applyGrayscaleOtsuThreshold(result)
+        _pastImageForAnalyze.value = result
+        return result
+    }
+
+    private fun startAutoCaptureProgress() {
+        if (isAutoCaptureProgressStarted) return
+        isAutoCaptureProgressStarted = true
         viewModelScope.launch {
             var elapsedTime = 0L
             while (elapsedTime < AUTO_CAPTURE_DURATION) {
-                if (!isImageSame || beforeImage.value is BeforeImage.None) {
-                    resetProgress()
+                if (isPresentImgSameWithPastImg.not() || pastImage.value is PastImage.None) {
+                    resetAutoCaptureProgress()
                     return@launch
                 }
                 delay(PROGRESS_UPDATE_INTERVAL)
                 elapsedTime += PROGRESS_UPDATE_INTERVAL
                 _autoCaptureProgress.value = (elapsedTime.toFloat() / AUTO_CAPTURE_DURATION * 100)
             }
+            _isProgressCharged.emit(true)
+            delay(1200)
+            resetAutoCaptureProgress()
         }
     }
 
-    private fun resetProgress() {
-        isProgressStarted = false
+    private fun resetAutoCaptureProgress() {
+        isAutoCaptureProgressStarted = false
         _autoCaptureProgress.value = 0f
     }
 
-    fun prepareImageCapture(): Pair<ImageCapture.OutputFileOptions, File> {
-        val imageFile = mediaRepository.createImageFile()
+    fun prepareImageCapture(cameraSelector: CameraSelector): Pair<ImageCapture.OutputFileOptions, File> {
+        val tempImageFile = mediaRepository.createTempImageFile()
         val metadata = ImageCapture.Metadata().apply {
-            isReversedHorizontal = cameraSelector.value == CameraSelector.DEFAULT_FRONT_CAMERA
+            isReversedHorizontal = (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA)
         }
-
-        val outputFileOptions = ImageCapture.OutputFileOptions.Builder(imageFile)
+        val outputFileOptions = ImageCapture.OutputFileOptions.Builder(tempImageFile)
             .setMetadata(metadata)
             .build()
 
-        return Pair(outputFileOptions, imageFile)
+        return Pair(outputFileOptions, tempImageFile)
     }
 
-    fun scanMediaFile(file: File) {
-        mediaRepository.scanMediaFile(file) { _, uri ->
-            viewModelScope.launch {
-                _imageCaptured.emit(uri)
-            }
-        }
-    }
-
-    fun selectAspectRatio(ratio: AspectRatio) {
-        if (oriBeforeImage != null) return
+    fun changeAspectRatio(ratio: AspectRatio) {
+        if (pastImage.value != null) return
         _aspectRatio.value = ratio
     }
 
-    fun flipCameraSelector() {
-        _cameraSelector.value = when (cameraSelector.value) {
+    fun flipCameraSelector(cameraSelector: CameraSelector) {
+        _cameraSelector.value = when (cameraSelector) {
             CameraSelector.DEFAULT_FRONT_CAMERA -> CameraSelector.DEFAULT_BACK_CAMERA
             else -> CameraSelector.DEFAULT_FRONT_CAMERA
         }
     }
 
-    fun getImageCaptureConfig(): Pair<AspectRatioStrategy, Rational?> {
+    fun getImageCaptureConfig(aspectRatio: AspectRatio): Pair<AspectRatioStrategy, Rational?> {
         var aspectRatioStrategy: AspectRatioStrategy? = null
         var cropAspectRatio: Rational? = null
-
-        when(aspectRatio.value) {
+        when (aspectRatio) {
             AspectRatio.RATIO_16_9 -> aspectRatioStrategy = AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
             AspectRatio.RATIO_3_4 -> aspectRatioStrategy = AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
             AspectRatio.RATIO_1_1 -> {
@@ -214,12 +223,11 @@ class CameraViewModel @Inject constructor(
                 cropAspectRatio = Rational(screenWidth, screenHeight)
             }
         }
-
         return Pair(aspectRatioStrategy, cropAspectRatio)
     }
 
-    fun getImageAnalysisConfig(): AspectRatioStrategy {
-        return when(aspectRatio.value) {
+    fun getImageAnalysisConfig(aspectRatio: AspectRatio): AspectRatioStrategy {
+        return when (aspectRatio) {
             AspectRatio.RATIO_16_9 -> AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
             AspectRatio.RATIO_3_4 -> AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
             AspectRatio.RATIO_1_1 -> AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
@@ -229,28 +237,7 @@ class CameraViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        analyzeImage?.release()
-    }
-
-    // 테스트용 함수들
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    fun setBeforeImagesForTest(beforeImage: BeforeImage, contour: Bitmap?, origin: Bitmap?) {
-        _beforeImage.value = beforeImage
-        contour?.let { contourBeforeImage = it }
-        origin?.let { oriBeforeImage = it }
-    }
-
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    fun getIsImageSameForTest(): Boolean = isImageSame
-
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    fun setCameraSelectorForTest(cameraSelector: CameraSelector) {
-        _cameraSelector.value = cameraSelector
-    }
-
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    fun setAspectRatioForTest(aspectRatio: AspectRatio) {
-        _aspectRatio.value = aspectRatio
+        pastImageForAnalyze.value?.release()
     }
 
     private suspend fun postMessage(msg: CameraMessage) {
@@ -261,19 +248,15 @@ class CameraViewModel @Inject constructor(
         data object FailedToAccessFile : CameraMessage()
     }
 
-    // image - 사용자에게 보여줄 원본 가이드 이미지
-    // analyzeImage - 현재 카메라 이미지를 비교 분석할 때 사용할 이미지(크기 조절)
-    sealed class BeforeImage {
-        data class Original(val image: Bitmap) : BeforeImage()
-        data class Contour(val image: Bitmap) : BeforeImage()
-        data object None : BeforeImage()
+    sealed class PastImage {
+        data class Original(val bitmap: Bitmap) : PastImage()
+        data class Contour(val bitmap: Bitmap) : PastImage()
+        data object None : PastImage()
 
-        fun getOriginalImage(): Bitmap? {
-            return when (this) {
-                is Original -> image
-                is Contour -> image
-                else -> null
-            }
+        fun getImage(): Bitmap? = when (this) {
+            is Original -> bitmap
+            is Contour -> bitmap
+            else -> null
         }
     }
 

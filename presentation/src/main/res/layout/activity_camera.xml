@@ -73,7 +73,7 @@
             app:layout_constraintTop_toTopOf="parent"/>
 
         <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/imageView_before"
+            android:id="@+id/imageView_past"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:alpha="0.5"
@@ -119,10 +119,9 @@
             app:layout_constraintTop_toTopOf="@+id/view2">
 
             <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/switch_mode_before_image"
+                android:id="@+id/button_change_past_image"
                 android:layout_width="50dp"
                 android:layout_height="50dp"
-                android:onClick="@{() -> cameraViewModel.changeBeforeImage()}"
                 android:text="MODE"
                 android:textSize="9dp"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -134,7 +133,7 @@
                 android:id="@+id/button_take_photo"
                 android:layout_width="70dp"
                 android:layout_height="70dp"
-                android:background="@drawable/button_white_circle"
+                android:background="@drawable/bg_white_circle"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -156,7 +155,6 @@
                 android:id="@+id/button_flip_camera_selector"
                 android:layout_width="50dp"
                 android:layout_height="50dp"
-                android:onClick="@{() -> cameraViewModel.flipCameraSelector()}"
                 android:text="FLIP"
                 android:textSize="10dp"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -182,48 +180,28 @@
                 android:layout_height="50dp"
                 android:text="3:4"
                 android:textSize="10dp"
-                android:onClick="@{() -> cameraViewModel.selectAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_3_4)}"/>
+                android:onClick="@{() -> cameraViewModel.changeAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_3_4)}"/>
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/button_ratio_9_16"
                 android:layout_width="50dp"
                 android:layout_height="50dp"
                 android:text="9:16"
                 android:textSize="10dp"
-                android:onClick="@{() -> cameraViewModel.selectAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_16_9)}"/>
+                android:onClick="@{() -> cameraViewModel.changeAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_16_9)}"/>
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/button_ratio_1_1"
                 android:layout_width="50dp"
                 android:layout_height="50dp"
                 android:text="1:1"
                 android:textSize="10dp"
-                android:onClick="@{() -> cameraViewModel.selectAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_1_1)}"/>
+                android:onClick="@{() -> cameraViewModel.changeAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_1_1)}"/>
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/button_ratio_full"
                 android:layout_width="50dp"
                 android:layout_height="50dp"
                 android:text="Full"
                 android:textSize="10dp"
-                android:onClick="@{() -> cameraViewModel.selectAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_FULL)}"/>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:layout_constraintTop_toBottomOf="@+id/textView_test">
-
-            <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/imageView_test1"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@color/gray" />
-
-            <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/imageView_test2"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@color/gray" />
+                android:onClick="@{() -> cameraViewModel.changeAspectRatio(com.yjy.presentation.feature.camera.CameraViewModel.AspectRatio.RATIO_FULL)}"/>
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

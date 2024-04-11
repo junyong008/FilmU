@@ -17,18 +17,18 @@ import org.opencv.imgproc.Imgproc
 import javax.inject.Inject
 
 interface ImageProcessor {
-    fun getEdgeImageFromBitmap(bitmap: Bitmap): Bitmap
-    fun getBlurredImageFromMat(mat: Mat): Bitmap
+    fun getContourImageFromBitmap(bitmap: Bitmap): Bitmap
+    fun getBlurImageFromMat(mat: Mat): Bitmap
     fun adjustImageProxy(imageProxy: ImageProxy, cameraSelector: CameraSelector, aspectRatio: CameraViewModel.AspectRatio): Mat?
     fun calculateImageSimilarity(image1: Mat, image2: Mat): Double
-    fun applyGrayscaleOtsuThreshold(mat: Mat)
+    fun applyGrayscaleOtsuThreshold(mat: Mat): Mat
 }
 
 class ImageProcessorImpl @Inject constructor(
     private val imageUtils: ImageUtils,
     private val displayManager: DisplayManager,
 ) : ImageProcessor {
-    override fun getEdgeImageFromBitmap(bitmap: Bitmap): Bitmap {
+    override fun getContourImageFromBitmap(bitmap: Bitmap): Bitmap {
         val mat = imageUtils.bitmapToMat(bitmap)
         Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY)
         // Imgproc.GaussianBlur(mat, mat, Size(17.0, 17.0), 3.0)
@@ -75,7 +75,7 @@ class ImageProcessorImpl @Inject constructor(
         return currentMat
     }
 
-    override fun getBlurredImageFromMat(mat: Mat): Bitmap {
+    override fun getBlurImageFromMat(mat: Mat): Bitmap {
         val blurMat = Mat()
         mat.copyTo(blurMat)
         Imgproc.blur(blurMat, blurMat, Size(200.0, 200.0))
@@ -95,8 +95,9 @@ class ImageProcessorImpl @Inject constructor(
         return Imgproc.compareHist(hist1, hist2, Imgproc.CV_COMP_BHATTACHARYYA)
     }
 
-    override fun applyGrayscaleOtsuThreshold(mat: Mat) {
+    override fun applyGrayscaleOtsuThreshold(mat: Mat): Mat {
         Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY)
         Imgproc.threshold(mat, mat, 0.0, 255.0, Imgproc.THRESH_OTSU)
+        return mat
     }
 }

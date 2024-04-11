@@ -37,7 +37,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(R.layout.activity_main) {
         if (result.resultCode == Activity.RESULT_OK) {
             (result.data?.data)?.let {
                 val intent = Intent(this, CameraActivity::class.java)
-                intent.putExtra("beforeImage", it)
+                intent.putExtra("pastImage", it)
                 startActivity(intent)
             }
         }
