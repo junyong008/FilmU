@@ -1,10 +1,13 @@
 package com.yjy.presentation.util
 
 import android.graphics.Bitmap
+import android.media.ExifInterface
 import android.util.Rational
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageProxy
 import com.yjy.presentation.feature.camera.CameraViewModel
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
@@ -17,18 +20,33 @@ import org.opencv.imgproc.Imgproc
 import javax.inject.Inject
 
 interface ImageProcessor {
-    fun getContourImageFromBitmap(bitmap: Bitmap): Bitmap
-    fun getBlurImageFromMat(mat: Mat): Bitmap
-    fun adjustImageProxy(imageProxy: ImageProxy, cameraSelector: CameraSelector, aspectRatio: CameraViewModel.AspectRatio): Mat?
-    fun calculateImageSimilarity(image1: Mat, image2: Mat): Double
-    fun applyGrayscaleOtsuThreshold(mat: Mat): Mat
+    suspend fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap
+    suspend fun getContourImageFromBitmap(bitmap: Bitmap): Bitmap
+    suspend fun getBlurImageFromMat(mat: Mat): Bitmap
+    suspend fun adjustImageProxy(imageProxy: ImageProxy, cameraSelector: CameraSelector, aspectRatio: CameraViewModel.AspectRatio): Mat?
+    suspend fun calculateImageSimilarity(image1: Mat, image2: Mat): Double
+    suspend fun createThresholdMat(mat: Mat): Mat
 }
 
 class ImageProcessorImpl @Inject constructor(
     private val imageUtils: ImageUtils,
     private val displayManager: DisplayManager,
+    private val defaultDispatcher: CoroutineDispatcher,
 ) : ImageProcessor {
-    override fun getContourImageFromBitmap(bitmap: Bitmap): Bitmap {
+    override suspend fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap = withContext(defaultDispatcher) {
+        return@withContext when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> imageUtils.rotateBitmap(bitmap, 90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> imageUtils.rotateBitmap(bitmap, 180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> imageUtils.rotateBitmap(bitmap, 270f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                imageUtils.rotateBitmap(bitmap, 270f)
+                imageUtils.flipBitmapHorizontally(bitmap)
+            }
+            else -> bitmap
+        }
+    }
+
+    override suspend fun getContourImageFromBitmap(bitmap: Bitmap): Bitmap = withContext(defaultDispatcher) {
         val mat = imageUtils.bitmapToMat(bitmap)
         Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY)
         // Imgproc.GaussianBlur(mat, mat, Size(17.0, 17.0), 3.0)
@@ -38,7 +56,7 @@ class ImageProcessorImpl @Inject constructor(
         val resultBitmap = imageUtils.matToBitmap(contoursMat)
         mat.release()
         contoursMat.release()
-        return resultBitmap
+        return@withContext resultBitmap
     }
 
     private fun getContours(mat: Mat): Mat {
@@ -59,12 +77,12 @@ class ImageProcessorImpl @Inject constructor(
     }
 
     // imageProxy를 preview로 보는 바와 같이 보정작업 (자료형 변환 + 회전 + 크롭)
-    override fun adjustImageProxy(
+    override suspend fun adjustImageProxy(
         imageProxy: ImageProxy,
         cameraSelector: CameraSelector,
         aspectRatio: CameraViewModel.AspectRatio
-    ): Mat? {
-        val currentMat = imageUtils.imageProxyToMat(imageProxy) ?: return null
+    ): Mat? = withContext(defaultDispatcher) {
+        val currentMat = imageUtils.imageProxyToMat(imageProxy) ?: return@withContext null
         imageUtils.rotateMat(currentMat, currentMat, imageProxy.imageInfo.rotationDegrees)
         if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) Core.flip(currentMat, currentMat, 1)
         when (aspectRatio) {
@@ -72,19 +90,18 @@ class ImageProcessorImpl @Inject constructor(
             CameraViewModel.AspectRatio.RATIO_FULL -> Rational(displayManager.getScreenSize().first, displayManager.getScreenSize().second)
             else -> null
         }?.let { imageUtils.cropMat(currentMat, currentMat, it) }
-        return currentMat
+        return@withContext currentMat
     }
 
-    override fun getBlurImageFromMat(mat: Mat): Bitmap {
+    override suspend fun getBlurImageFromMat(mat: Mat): Bitmap = withContext(defaultDispatcher) {
         val blurMat = Mat()
-        mat.copyTo(blurMat)
-        Imgproc.blur(blurMat, blurMat, Size(200.0, 200.0))
+        Imgproc.blur(mat, blurMat, Size(200.0, 200.0))
         val result = imageUtils.matToBitmap(blurMat)
         blurMat.release()
-        return result
+        return@withContext result
     }
 
-    override fun calculateImageSimilarity(image1: Mat, image2: Mat): Double {
+    override suspend fun calculateImageSimilarity(image1: Mat, image2: Mat): Double = withContext(defaultDispatcher) {
         val histSize = MatOfInt(256)
         val ranges = MatOfFloat(0f, 256f)
         val hist1 = Mat()
@@ -92,12 +109,13 @@ class ImageProcessorImpl @Inject constructor(
         val accumulate = false
         Imgproc.calcHist(listOf(image1), MatOfInt(0), Mat(), hist1, histSize, ranges, accumulate)
         Imgproc.calcHist(listOf(image2), MatOfInt(0), Mat(), hist2, histSize, ranges, accumulate)
-        return Imgproc.compareHist(hist1, hist2, Imgproc.CV_COMP_BHATTACHARYYA)
+        return@withContext Imgproc.compareHist(hist1, hist2, Imgproc.CV_COMP_BHATTACHARYYA)
     }
 
-    override fun applyGrayscaleOtsuThreshold(mat: Mat): Mat {
-        Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY)
-        Imgproc.threshold(mat, mat, 0.0, 255.0, Imgproc.THRESH_OTSU)
-        return mat
+    override suspend fun createThresholdMat(mat: Mat): Mat = withContext(defaultDispatcher) {
+        val resultMat = Mat()
+        Imgproc.cvtColor(mat, resultMat, Imgproc.COLOR_BGR2GRAY)
+        Imgproc.threshold(resultMat, resultMat, 0.0, 255.0, Imgproc.THRESH_OTSU)
+        return@withContext resultMat
     }
 }

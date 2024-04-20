@@ -12,9 +12,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yjy.domain.repository.MediaRepository
 import com.yjy.presentation.util.DisplayManager
+import com.yjy.presentation.util.HandDetector
 import com.yjy.presentation.util.ImageProcessor
 import com.yjy.presentation.util.ImageUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,10 +35,13 @@ class CameraViewModel @Inject constructor(
     private val displayManager: DisplayManager,
     private val imageProcessor: ImageProcessor,
     private val imageUtils: ImageUtils,
+    private val handDetector: HandDetector,
 ) : ViewModel() {
 
-    private var isPresentImgSameWithPastImg = false
-    private var isAutoCaptureProgressStarted = false
+    private var progressJob: Job? = null
+    private var timerJob: Job? = null
+    private var checkExtendedFingerJob: Job? = null
+    private var recentExtendedFingerCount = 0
 
     private val _message = MutableSharedFlow<CameraMessage>(replay = 0)
     val message: SharedFlow<CameraMessage> = _message
@@ -59,14 +64,23 @@ class CameraViewModel @Inject constructor(
     private val _autoCaptureProgress = MutableStateFlow(0f)
     val autoCaptureProgress: StateFlow<Float> = _autoCaptureProgress.asStateFlow()
 
-    private val _isProgressCharged = MutableSharedFlow<Boolean>(replay = 0)
-    val isProgressCharged: SharedFlow<Boolean> = _isProgressCharged
+    private val _takePhoto = MutableSharedFlow<Boolean>(replay = 0)
+    val takePhoto: SharedFlow<Boolean> = _takePhoto
+
+    private val _timer = MutableStateFlow<Int?>(null)
+    val timer: StateFlow<Int?> = _timer.asStateFlow()
+
+    private val _timerSecond = MutableStateFlow<Int?>(null)
+    val timerSecond: StateFlow<Int?> = _timerSecond.asStateFlow()
 
     private val _aspectRatio = MutableStateFlow(AspectRatio.RATIO_FULL)
     val aspectRatio: StateFlow<AspectRatio> = _aspectRatio.asStateFlow()
 
     private val _cameraSelector = MutableStateFlow(CameraSelector.DEFAULT_BACK_CAMERA)
     val cameraSelector: StateFlow<CameraSelector> = _cameraSelector.asStateFlow()
+
+    /*private val _handData = MutableStateFlow<HandLandmarkerResult?>(null)
+    val handData: StateFlow<HandLandmarkerResult?> = _handData*/
 
     fun initPastImage(initImage: Uri) {
         if (pastImage.value != null) return
@@ -85,7 +99,7 @@ class CameraViewModel @Inject constructor(
             )
 
             // 전면 촬영, 회전 정보를 바탕으로 눈으로 보이는 바와 같이 로드하기 위한 보정 작업.
-            val originalImage = imageUtils.rotateBitmapAccordingToExif(bitmap, orientation)
+            val originalImage = imageProcessor.rotateBitmapAccordingToExif(bitmap, orientation)
             val contourImage = imageProcessor.getContourImageFromBitmap(originalImage)
 
             setAspectRatio(originalImage)
@@ -120,65 +134,129 @@ class CameraViewModel @Inject constructor(
         }
     }
 
+    fun changeTimer(timer: Int?) {
+        _timer.value = when(timer) {
+            null ->  3
+            3 -> 5
+            5 -> 10
+            else -> null
+        }
+    }
+
+    fun takePhoto(timer: Int?) {
+        viewModelScope.launch {
+            if (timer != null) {
+                startTimer(timer)
+            } else {
+                resetAutoCaptureProgress()
+                _takePhoto.emit(true)
+            }
+        }
+    }
+
     fun analysisImageProxy(
         imageProxy: ImageProxy,
         pastImage: PastImage?,
         pastImageForAnalyze: Mat?,
     ) {
-        val presentImage = imageProcessor.adjustImageProxy(imageProxy, cameraSelector.value, aspectRatio.value) ?: return
-
-        // 현재 이미지의 블러화
-        _presentBlurImage.value = imageProcessor.getBlurImageFromMat(presentImage)
-
-        // 과거, 현재 이미지 유사도 분석
-        if (pastImage != null && pastImage !is PastImage.None) {
-            isPresentImgSameWithPastImg = isPresentImageSameWithPastImage(presentImage, pastImageForAnalyze)
-            if (isPresentImgSameWithPastImg) startAutoCaptureProgress()
+        viewModelScope.launch {
+            val presentImage = imageProcessor.adjustImageProxy(imageProxy, cameraSelector.value, aspectRatio.value) ?: return@launch
+            try {
+                createBlurImage(presentImage)
+                analyzeImageSimilarity(presentImage, pastImage, pastImageForAnalyze)
+                checkFingerCountMaintain(presentImage)
+                // _handData.value = handDetector.detectInImage(presentBitmap)
+            } finally {
+                presentImage.release()
+                imageProxy.close()
+            }
         }
-
-        presentImage.release()
     }
 
-    private fun isPresentImageSameWithPastImage(presentImage: Mat, pastImageForAnalyze: Mat?): Boolean {
-        val present = imageProcessor.applyGrayscaleOtsuThreshold(presentImage)
+    private suspend fun createBlurImage(presentImage: Mat) {
+        _presentBlurImage.value = imageProcessor.getBlurImageFromMat(presentImage)
+    }
+
+    private suspend fun analyzeImageSimilarity(presentImage: Mat, pastImage: PastImage?, pastImageForAnalyze: Mat?) {
+        if (pastImage != null && pastImage !is PastImage.None && timerJob == null) {
+            if (isPresentImageSameWithPastImage(presentImage, pastImageForAnalyze))
+                startAutoCaptureProgress()
+            else
+                resetAutoCaptureProgress()
+        }
+    }
+
+    private suspend fun checkFingerCountMaintain(presentImage: Mat) {
+        val presentBitmap = imageUtils.matToBitmap(presentImage)
+        val currentCount = handDetector.getExtendedFingerCount(presentBitmap)
+        if (checkExtendedFingerJob == null || recentExtendedFingerCount != currentCount) {
+            checkExtendedFingerJob?.cancel()
+            recentExtendedFingerCount = currentCount
+            checkExtendedFingerJob = viewModelScope.launch {
+                delay(MAINTAIN_TIME_FOR_RECOGNIZE_TIMER)
+                if (recentExtendedFingerCount == currentCount && currentCount >= MIN_SECOND_FOR_TIMER && timerJob == null) {
+                    startTimer(currentCount)
+                }
+            }
+        }
+    }
+
+    private suspend fun isPresentImageSameWithPastImage(presentImage: Mat, pastImageForAnalyze: Mat?): Boolean {
+        val present = imageProcessor.createThresholdMat(presentImage)
         val past = pastImageForAnalyze ?: createPastImageForAnalyze(presentImage)
         val similarity = imageProcessor.calculateImageSimilarity(present, past)
+        present.release()
         return similarity < MAX_SIMILARITY_TO_MATCH
     }
-
-    // 과거 이미지를 현재 이미지의 크기와 색감을 일치화하여 분석용 과거 이미지 생성
-    private fun createPastImageForAnalyze(presentImage: Mat): Mat {
+    private suspend fun createPastImageForAnalyze(presentImage: Mat): Mat {
         val (resizeW, resizeH) = imageUtils.getMatSize(presentImage)
-        val resizedImage = imageUtils.resizeBitmap(pastOriginalImage.value!!, resizeW, resizeH)
-        val result = imageUtils.bitmapToMat(resizedImage)
-        imageProcessor.applyGrayscaleOtsuThreshold(result)
+        val resizedOriginalBitmap = imageUtils.resizeBitmap(pastOriginalImage.value!!, resizeW, resizeH)
+        val resizedOriginalMat = imageUtils.bitmapToMat(resizedOriginalBitmap)
+        val result = imageProcessor.createThresholdMat(resizedOriginalMat)
+        resizedOriginalMat.release()
         _pastImageForAnalyze.value = result
         return result
     }
 
     private fun startAutoCaptureProgress() {
-        if (isAutoCaptureProgressStarted) return
-        isAutoCaptureProgressStarted = true
-        viewModelScope.launch {
+        if (progressJob != null) return
+        progressJob = viewModelScope.launch {
             var elapsedTime = 0L
             while (elapsedTime < AUTO_CAPTURE_DURATION) {
-                if (isPresentImgSameWithPastImg.not() || pastImage.value is PastImage.None) {
-                    resetAutoCaptureProgress()
-                    return@launch
-                }
+                if (pastImage.value is PastImage.None) resetAutoCaptureProgress()
                 delay(PROGRESS_UPDATE_INTERVAL)
                 elapsedTime += PROGRESS_UPDATE_INTERVAL
                 _autoCaptureProgress.value = (elapsedTime.toFloat() / AUTO_CAPTURE_DURATION * 100)
             }
-            _isProgressCharged.emit(true)
+            _takePhoto.emit(true)
             delay(1200)
             resetAutoCaptureProgress()
         }
     }
-
     private fun resetAutoCaptureProgress() {
-        isAutoCaptureProgressStarted = false
+        progressJob?.cancel()
+        progressJob = null
         _autoCaptureProgress.value = 0f
+    }
+
+    private fun startTimer(second: Int) {
+        if (timerJob != null) return
+        resetAutoCaptureProgress()
+        timerJob = viewModelScope.launch {
+            var remainTime = second
+            while (remainTime > 0) {
+                _timerSecond.value = remainTime
+                delay(1000)
+                remainTime--
+            }
+            _takePhoto.emit(true)
+            resetTimer()
+        }
+    }
+    fun resetTimer() {
+        timerJob?.cancel()
+        timerJob = null
+        _timerSecond.value = null
     }
 
     fun prepareImageCapture(cameraSelector: CameraSelector): Pair<ImageCapture.OutputFileOptions, File> {
@@ -264,5 +342,7 @@ class CameraViewModel @Inject constructor(
         private const val MAX_SIMILARITY_TO_MATCH = 0.03
         private const val AUTO_CAPTURE_DURATION = 5000L
         private const val PROGRESS_UPDATE_INTERVAL = 100L
+        private const val MAINTAIN_TIME_FOR_RECOGNIZE_TIMER = 1500L
+        private const val MIN_SECOND_FOR_TIMER = 3
     }
 }

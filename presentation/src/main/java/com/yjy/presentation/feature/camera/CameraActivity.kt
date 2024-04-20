@@ -45,8 +45,25 @@ import java.util.concurrent.Executors
 class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_camera) {
 
     private val cameraViewModel: CameraViewModel by viewModels()
-    private lateinit var cameraExecutor: ExecutorService
-    private var imageCapture: ImageCapture? = null
+    private val cameraExecutor: ExecutorService by lazy { Executors.newSingleThreadExecutor() }
+    private lateinit var imageCapture: ImageCapture
+    private val timerHideViews by lazy {
+        mutableListOf(
+            binding.linearLayoutAspectRatio,
+            binding.buttonFlipCameraSelector,
+            binding.buttonTakePhoto,
+            binding.progressSimilarity,
+            binding.view2
+        )
+    }
+    private val timerShowViews by lazy {
+        listOf<View>(
+            binding.ibuttonStopTimer,
+            binding.textViewTimer
+        )
+    }
+
+
     override fun initViewModel() {
         binding.cameraViewModel = cameraViewModel
     }
@@ -54,7 +71,6 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
     override fun initView(savedInstanceState: Bundle?) {
         setDisplayCutoutMode()
         initPastImage()
-        cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
     // 상태바 영역까지 확장하여 사용
@@ -71,10 +87,16 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         cameraViewModel.initPastImage(pastImage)
         listOf(
             binding.linearLayoutAspectRatio
-        ).forEach { it.isVisible = false }
+        ).forEach {
+            it.isVisible = false
+            timerHideViews.remove(it)
+        }
         listOf(
             binding.buttonChangePastImage
-        ).forEach { it.isVisible = true }
+        ).forEach {
+            it.isVisible = true
+            timerHideViews.add(it)
+        }
     }
 
     private fun requestPermissions() {
@@ -149,15 +171,15 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
                 cameraViewModel.pastImage.value,
                 cameraViewModel.pastImageForAnalyze.value
             )
-            imageProxy.close()
         })
         return imageAnalyzer
     }
 
     override fun setListener() {
         binding.buttonTakePhoto.setOnClickListener { view ->
+            vibrate(5L)
             animateShrink(view)
-            takePhoto()
+            cameraViewModel.takePhoto(cameraViewModel.timer.value)
         }
         binding.buttonChangePastImage.setOnClickListener {
             cameraViewModel.changePastImage(
@@ -165,6 +187,9 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
                 cameraViewModel.pastOriginalImage.value,
                 cameraViewModel.pastContourImage.value
             )
+        }
+        binding.buttonSetTimer.setOnClickListener {
+            cameraViewModel.changeTimer(cameraViewModel.timer.value)
         }
         binding.buttonFlipCameraSelector.setOnClickListener {
             cameraViewModel.flipCameraSelector(cameraViewModel.cameraSelector.value)
@@ -177,9 +202,9 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
     }
 
     private fun takePhoto() {
-        val imageCapture = imageCapture ?: return
-        vibrate()
+        vibrate(10L)
         flashScreen()
+        timerHideViews.map { it.visibility = View.INVISIBLE }
         val (outputFileOptions, imageFile) = cameraViewModel.prepareImageCapture(cameraViewModel.cameraSelector.value)
         imageCapture.takePicture(
             outputFileOptions,
@@ -187,6 +212,10 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     startPreviewActivity(imageFile)
+                    lifecycleScope.launch {
+                        delay(800)
+                        timerHideViews.map { it.visibility = View.VISIBLE }
+                    }
                 }
                 override fun onError(exception: ImageCaptureException) {
                     showToast(getString(R.string.fail_to_take_photo))
@@ -195,12 +224,12 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         )
     }
 
-    private fun vibrate() {
+    private fun vibrate(duration: Long) {
         val vibrator = getSystemService(Vibrator::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator?.vibrate(VibrationEffect.createOneShot(VIBRATION_DURATION, VibrationEffect.DEFAULT_AMPLITUDE))
+            vibrator?.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
         } else {
-            vibrator?.vibrate(VIBRATION_DURATION) //deprecated in API 26
+            vibrator?.vibrate(duration) //deprecated in API 26
         }
     }
 
@@ -227,6 +256,9 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         collectLatestStateFlow(cameraViewModel.cameraSelector) {
             updateCameraConfiguration()
         }
+        collectLatestStateFlow(cameraViewModel.timer) {
+            binding.buttonSetTimer.text = it?.toString() ?: "TIME"
+        }
         collectLatestStateFlow(cameraViewModel.pastImage) { pastImage ->
             val pastView = binding.imageViewPast
             pastView.alpha = if (pastImage is CameraViewModel.PastImage.Original) 0.5f else 1f
@@ -234,6 +266,16 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         }
         collectLatestStateFlow(cameraViewModel.autoCaptureProgress) {
             binding.progressSimilarity.setProgress(it)
+        }
+        collectLatestStateFlow(cameraViewModel.timerSecond) { remainSec ->
+            if (remainSec != null) {
+                binding.textViewTimer.text = remainSec.toString()
+                timerShowViews.map { it.visibility = View.VISIBLE }
+                timerHideViews.map { it.visibility = View.INVISIBLE }
+            } else {
+                timerHideViews.map { it.visibility = View.VISIBLE }
+                timerShowViews.map { it.visibility = View.INVISIBLE }
+            }
         }
     }
 
@@ -276,9 +318,7 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
                 }
             }
         }
-        collectLatestSharedFlow(cameraViewModel.isProgressCharged) { isProgressCharged ->
-            if (isProgressCharged) takePhoto()
-        }
+        collectLatestSharedFlow(cameraViewModel.takePhoto) { takePhoto() }
     }
 
     companion object {
@@ -286,7 +326,6 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         private val REQUIRE_PERMISSIONS = mutableListOf(Manifest.permission.CAMERA).apply {
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }.toTypedArray()
-        private const val VIBRATION_DURATION = 10L
         private const val CAPTURE_EFFECT_DURATION = 10L
     }
 }

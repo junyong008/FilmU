@@ -99,15 +99,21 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintHeight_percent="0.3"/>
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/textView_test"
+        <com.yjy.presentation.view.OutLineTextView
+            android:id="@+id/textView_timer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="TEST"
+            android:layout_marginTop="32dp"
             android:textColor="#FFFFFF"
-            android:textSize="25sp"
+            android:textSize="65sp"
+            android:fontFamily="@font/kjcgothic_bold"
+            tools:text="7"
+            android:visibility="invisible"
+            app:textStrokeColor="#000000"
+            app:textStrokeWidth="2"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/view_1_1" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/constraintLayout_mainKeys"
@@ -124,6 +130,7 @@
                 android:layout_height="50dp"
                 android:text="MODE"
                 android:textSize="9dp"
+                android:visibility="invisible"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/button_take_photo"
                 app:layout_constraintStart_toStartOf="parent"
@@ -139,7 +146,21 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <com.yjy.presentation.util.CircularProgressBar
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/ibutton_stop_timer"
+                android:layout_width="83dp"
+                android:layout_height="83dp"
+                android:elevation="5dp"
+                android:visibility="invisible"
+                android:src="@drawable/ic_pause"
+                android:background="@drawable/button_trans_black_circle"
+                android:onClick="@{() -> cameraViewModel.resetTimer()}"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <com.yjy.presentation.view.CircularProgressBar
                 android:id="@+id/progress_similarity"
                 android:layout_width="100dp"
                 android:layout_height="100dp"
@@ -163,6 +184,18 @@
                 app:layout_constraintTop_toTopOf="parent" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/button_set_timer"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginStart="8dp"
+            android:visibility="invisible"
+            android:text="TIME"
+            android:textSize="10dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <LinearLayout
             android:id="@+id/linearLayout_aspectRatio"

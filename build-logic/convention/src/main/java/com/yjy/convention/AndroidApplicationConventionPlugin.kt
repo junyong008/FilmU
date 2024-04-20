@@ -69,6 +69,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
                     add("implementation", libs.findLibrary("glide").get())
                     add("implementation", libs.findLibrary("permission").get())
+                    add("implementation", libs.findLibrary("mediapipe-tasks").get())
                 }
             }
         }

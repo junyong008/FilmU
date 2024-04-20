@@ -2,7 +2,6 @@ package com.yjy.presentation.util
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.media.ExifInterface
 import android.util.Rational
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
@@ -20,11 +19,11 @@ interface ImageUtils {
     fun rotateBitmap(bitmap: Bitmap, angle: Float): Bitmap
     fun resizeBitmap(bitmap: Bitmap, width: Int, height: Int): Bitmap
     fun flipBitmapHorizontally(bitmap: Bitmap): Bitmap
-    fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap
     fun cropMat(source: Mat, target: Mat, aspectRatio: Rational)
     fun rotateMat(source: Mat, target: Mat, degree: Int)
     fun matToBitmap(mat: Mat): Bitmap
     fun getMatSize(mat: Mat): Pair<Int, Int>
+    fun copyMat(original: Mat): Mat
     fun imageProxyToMat(imageProxy: ImageProxy): Mat?
 }
 
@@ -51,19 +50,6 @@ class ImageUtilsImpl : ImageUtils {
             postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
         }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    }
-
-    override fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap {
-        return when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(bitmap, 90f)
-            ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(bitmap, 180f)
-            ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(bitmap, 270f)
-            ExifInterface.ORIENTATION_TRANSVERSE -> {
-                rotateBitmap(bitmap, 270f)
-                flipBitmapHorizontally(bitmap)
-            }
-            else -> bitmap
-        }
     }
 
     // Mat
@@ -109,6 +95,12 @@ class ImageUtilsImpl : ImageUtils {
 
     override fun getMatSize(mat: Mat): Pair<Int, Int> = Pair(mat.width(), mat.height())
 
+    override fun copyMat(original: Mat): Mat {
+        val copied = Mat()
+        original.copyTo(copied)
+        return copied
+    }
+
     // ImageProxy
     @OptIn(ExperimentalGetImage::class)
     override fun imageProxyToMat(imageProxy: ImageProxy): Mat? {
@@ -132,6 +124,7 @@ class ImageUtilsImpl : ImageUtils {
 
         val mat = Mat()
         Imgproc.cvtColor(matYuv, mat, Imgproc.COLOR_YUV2RGBA_NV21, 4)
+        matYuv.release()
 
         return mat
     }

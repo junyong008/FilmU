@@ -20,6 +20,7 @@ coroutines = "1.8.0"
 
 # Google
 material = "1.11.0"
+mediapipe-tasks = "0.10.0"
 
 # Hilt
 hilt = "2.48"
@@ -73,6 +74,7 @@ coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version
 
 # Google
 material = { module = "com.google.android.material:material", version.ref = "material" }
+mediapipe-tasks = { module = "com.google.mediapipe:tasks-vision", version.ref = "mediapipe-tasks" }
 
 # Hilt
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
