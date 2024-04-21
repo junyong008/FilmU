@@ -8,6 +8,7 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import com.yjy.domain.repository.MediaRepository
 import com.yjy.presentation.util.DisplayManager
+import com.yjy.presentation.util.HandDetector
 import com.yjy.presentation.util.ImageProcessor
 import com.yjy.presentation.util.ImageUtils
 import io.mockk.coEvery
@@ -41,6 +42,7 @@ class CameraViewModelTest {
     private lateinit var displayManager: DisplayManager
     private lateinit var imageProcessor: ImageProcessor
     private lateinit var imageUtils: ImageUtils
+    private lateinit var handDetector: HandDetector
 
     @Before
     fun setUp() {
@@ -49,7 +51,8 @@ class CameraViewModelTest {
         displayManager = mockk(relaxed = true)
         imageProcessor = mockk(relaxed = true)
         imageUtils = mockk(relaxed = true)
-        viewModel = CameraViewModel(mediaRepository, displayManager, imageProcessor, imageUtils)
+        handDetector = mockk(relaxed = true)
+        viewModel = CameraViewModel(mediaRepository, displayManager, imageProcessor, imageUtils, handDetector)
     }
 
     @After
@@ -67,7 +70,7 @@ class CameraViewModelTest {
         val contourImage = mockk<Bitmap>(relaxed = true)
         coEvery { mediaRepository.getBitmapFromUri(uri) } returns bitmap
         coEvery { mediaRepository.getExifInterfaceFromUri(uri) } returns exifInterface
-        coEvery { imageUtils.rotateBitmapAccordingToExif(bitmap, any()) } returns rotatedImage
+        coEvery { imageProcessor.rotateBitmapAccordingToExif(bitmap, any()) } returns rotatedImage
         coEvery { rotatedImage.width } returns 900
         coEvery { rotatedImage.height } returns 1600
         coEvery { imageProcessor.getContourImageFromBitmap(rotatedImage) } returns contourImage
@@ -116,17 +119,18 @@ class CameraViewModelTest {
     }
 
     @Test
-    fun `analysisImageProxy_이미지 프록시를 분석하여 현재 블러 이미지를 설정`() = runTest {
+    fun `analysisImageProxy_이미지 프록시를 분석하여 현재 블러 이미지를 설정`() = runTest(testDispatcher) {
         // Given
         val imageProxy: ImageProxy = mockk(relaxed = true)
         val pastImage: CameraViewModel.PastImage = mockk(relaxed = true)
         val pastImageForAnalyze: Mat = mockk(relaxed = true)
         val presentImage: Mat = mockk(relaxed = true)
         val presentBlurImage: Bitmap = mockk(relaxed = true)
-        every { imageProcessor.adjustImageProxy(imageProxy, any(), any()) } returns presentImage
-        every { imageProcessor.getBlurImageFromMat(presentImage) } returns presentBlurImage
+        coEvery { imageProcessor.adjustImageProxy(imageProxy, any(), any()) } returns presentImage
+        coEvery { imageProcessor.getBlurImageFromMat(presentImage) } returns presentBlurImage
         // When
         viewModel.analysisImageProxy(imageProxy, pastImage, pastImageForAnalyze)
+        advanceUntilIdle()
         // Then
         assertEquals(presentBlurImage, viewModel.presentBlurImage.value)
     }
@@ -139,10 +143,10 @@ class CameraViewModelTest {
         val pastImageForAnalyze: Mat = mockk(relaxed = true)
         val presentImage: Mat = mockk(relaxed = true)
         val presentBlurImage: Bitmap = mockk(relaxed = true)
-        every { imageProcessor.adjustImageProxy(imageProxy, any(), any()) } returns presentImage
-        every { imageProcessor.getBlurImageFromMat(presentImage) } returns presentBlurImage
-        every { imageProcessor.applyGrayscaleOtsuThreshold(any()) } returns presentImage
-        every { imageProcessor.calculateImageSimilarity(any(), any()) } returns 0.01
+        coEvery { imageProcessor.adjustImageProxy(imageProxy, any(), any()) } returns presentImage
+        coEvery { imageProcessor.getBlurImageFromMat(presentImage) } returns presentBlurImage
+        coEvery { imageProcessor.createThresholdMat(any()) } returns presentImage
+        coEvery { imageProcessor.calculateImageSimilarity(any(), any()) } returns 0.01
         // When
         viewModel.analysisImageProxy(imageProxy, pastImage, pastImageForAnalyze)
         advanceTimeBy(6000) // 6초 동안 진행률 업데이트
