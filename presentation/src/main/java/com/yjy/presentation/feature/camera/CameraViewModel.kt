@@ -17,6 +17,8 @@ import com.yjy.presentation.util.ImageProcessor
 import com.yjy.presentation.util.ImageUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -161,15 +163,14 @@ class CameraViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             val presentImage = imageProcessor.adjustImageProxy(imageProxy, cameraSelector.value, aspectRatio.value) ?: return@launch
-            try {
-                createBlurImage(presentImage)
-                analyzeImageSimilarity(presentImage, pastImage, pastImageForAnalyze)
-                checkFingerCountMaintain(presentImage)
-                // _handData.value = handDetector.detectInImage(presentBitmap)
-            } finally {
-                presentImage.release()
-                imageProxy.close()
-            }
+
+            val blurDeferred = async { createBlurImage(presentImage) }
+            val similarityDeferred = async { analyzeImageSimilarity(presentImage, pastImage, pastImageForAnalyze) }
+            val fingerCountDeferred = async { checkFingerCountMaintain(presentImage) }
+            awaitAll(blurDeferred, similarityDeferred, fingerCountDeferred)
+
+            presentImage.release()
+            imageProxy.close()
         }
     }
 
