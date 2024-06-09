@@ -12,6 +12,7 @@ import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Rect
 import org.opencv.imgproc.Imgproc
+import javax.inject.Inject
 import kotlin.math.max
 
 interface ImageUtils {
@@ -27,7 +28,7 @@ interface ImageUtils {
     fun imageProxyToMat(imageProxy: ImageProxy): Mat?
 }
 
-class ImageUtilsImpl : ImageUtils {
+class ImageUtilsImpl @Inject constructor() : ImageUtils {
 
     // Bitmap
     override fun bitmapToMat(bitmap: Bitmap): Mat {

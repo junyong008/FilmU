@@ -18,6 +18,7 @@ import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import javax.inject.Inject
+import javax.inject.Named
 
 interface ImageProcessor {
     suspend fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap
@@ -31,7 +32,7 @@ interface ImageProcessor {
 class ImageProcessorImpl @Inject constructor(
     private val imageUtils: ImageUtils,
     private val displayManager: DisplayManager,
-    private val defaultDispatcher: CoroutineDispatcher,
+    @Named("defaultDispatcher") private val defaultDispatcher: CoroutineDispatcher,
 ) : ImageProcessor {
     override suspend fun rotateBitmapAccordingToExif(bitmap: Bitmap, orientation: Int): Bitmap = withContext(defaultDispatcher) {
         return@withContext when (orientation) {
