@@ -14,6 +14,7 @@ import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.AnimationUtils
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -34,6 +35,9 @@ import com.yjy.presentation.R
 import com.yjy.presentation.base.BaseActivity
 import com.yjy.presentation.databinding.ActivityCameraBinding
 import com.yjy.presentation.feature.preview.PreviewActivity
+import com.yjy.presentation.util.collectLatestSharedFlow
+import com.yjy.presentation.util.collectLatestStateFlow
+import com.yjy.presentation.util.parcelable
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,8 +46,9 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 @AndroidEntryPoint
-class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_camera) {
+open class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_camera) {
 
+    private var toast: Toast? = null
     private val cameraViewModel: CameraViewModel by viewModels()
     private val cameraExecutor: ExecutorService by lazy { Executors.newSingleThreadExecutor() }
     private lateinit var imageCapture: ImageCapture
@@ -63,6 +68,10 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         )
     }
 
+    private fun showToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
+        toast?.cancel()
+        toast = Toast.makeText(this, message, duration).apply { show() }
+    }
 
     override fun initViewModel() {
         binding.cameraViewModel = cameraViewModel
@@ -83,7 +92,7 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
 
     // 기존 이미지가 있는지 체크 (새 프로젝트 or 기존 프로젝트인지 확인하는 겸)
     private fun initPastImage() {
-        val pastImage: Uri = intent.extras?.getParcelable("pastImage") ?: return
+        val pastImage: Uri = intent.parcelable("pastImage") ?: return
         cameraViewModel.initPastImage(pastImage)
         listOf(
             binding.linearLayoutAspectRatio
@@ -247,7 +256,7 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
         startActivity(intent)
     }
 
-    override fun observeStateFlows() {
+    override fun observeFlows() {
         collectLatestStateFlow(cameraViewModel.aspectRatio) {
             // 뷰가 완전히 렌더링되기 전에 updatePreviewViewSize하면 transition가 작동하지 않음. 고로 post 사용.
             binding.viewTransform.post { updatePreviewViewSize(it) }
@@ -277,6 +286,15 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
                 timerShowViews.map { it.visibility = View.INVISIBLE }
             }
         }
+        collectLatestSharedFlow(cameraViewModel.message) {
+            when(it) {
+                is CameraViewModel.CameraMessage.FailedToAccessFile -> {
+                    showToast(getString(R.string.fail_to_access_file))
+                    onBackPressedCallback.handleOnBackPressed()
+                }
+            }
+        }
+        collectLatestSharedFlow(cameraViewModel.takePhoto) { takePhoto() }
     }
 
     private fun updatePreviewViewSize(aspectRatio: CameraViewModel.AspectRatio) {
@@ -307,18 +325,6 @@ class CameraActivity : BaseActivity<ActivityCameraBinding>(R.layout.activity_cam
             CameraViewModel.AspectRatio.RATIO_1_1 -> binding.view11.layoutParams
             CameraViewModel.AspectRatio.RATIO_FULL -> binding.viewFull.layoutParams
         }
-    }
-
-    override fun observeSharedFlow() {
-        collectLatestSharedFlow(cameraViewModel.message) {
-            when(it) {
-                is CameraViewModel.CameraMessage.FailedToAccessFile -> {
-                    showToast(getString(R.string.fail_to_access_file))
-                    onBackPressedCallback.handleOnBackPressed()
-                }
-            }
-        }
-        collectLatestSharedFlow(cameraViewModel.takePhoto) { takePhoto() }
     }
 
     companion object {
